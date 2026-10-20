@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Icono provisional: farol en pixel art sobre el azul del abismo -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+  android:width="108dp"
+  android:height="108dp"
+  android:viewportWidth="16"
+  android:viewportHeight="16">
+  <path android:fillColor="#0d1c24" android:pathData="M0,0h16v16h-16z" />
+  <path android:fillColor="#4a5b6a" android:pathData="M7,2h2v1h-2zM5,3h6v1h-6zM5,11h6v1h-6zM6,12h4v1h-4z" />
+  <path android:fillColor="#d9731f" android:pathData="M6,4h4v7h-4z" />
+  <path android:fillColor="#ffb547" android:pathData="M7,5h2v5h-2z" />
+  <path android:fillColor="#ffe39a" android:pathData="M7,6h2v2h-2z" />
+</vector>

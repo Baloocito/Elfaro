@@ -1,0 +1,2 @@
+rootProject.name = 'faro-hundido'
+include 'core', 'lwjgl3', 'android'

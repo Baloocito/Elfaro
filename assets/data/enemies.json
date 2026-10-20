@@ -1,0 +1,20 @@
+[
+  {
+    "id": "ahogado", "name": "Ahogado", "biome": "muelle",
+    "hp": 40, "dmg": 10, "speed": 40, "cost": 2,
+    "body": [12, 12], "luzDrop": [1, 2],
+    "attack": { "kind": "lunge", "range": 40, "telegraph": 0.4, "cooldown": 1.8 }
+  },
+  {
+    "id": "medusa", "name": "Medusa-farol", "biome": "muelle",
+    "hp": 24, "dmg": 8, "speed": 30, "cost": 2,
+    "body": [12, 12], "luzDrop": [1, 2],
+    "attack": { "kind": "pulse", "range": 24, "telegraph": 0.6, "cooldown": 2.4 }
+  },
+  {
+    "id": "cangrejo", "name": "Cangrejo-relicario", "biome": "muelle",
+    "hp": 60, "dmg": 12, "speed": 55, "cost": 3,
+    "body": [18, 12], "luzDrop": [1, 2],
+    "attack": { "kind": "pinch", "range": 22, "telegraph": 0.45, "cooldown": 1.4 }
+  }
+]

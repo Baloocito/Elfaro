@@ -1,0 +1,18 @@
+apply plugin: 'java-library'
+apply plugin: 'kotlin'
+
+java {
+  sourceCompatibility = JavaVersion.VERSION_17
+  targetCompatibility = JavaVersion.VERSION_17
+}
+
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+  compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+}
+
+dependencies {
+  api "com.badlogicgames.gdx:gdx:$gdxVersion"
+  api "io.github.libktx:ktx-app:$ktxVersion"
+  api "io.github.libktx:ktx-graphics:$ktxVersion"
+  api "org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion"
+}

@@ -1,0 +1,43 @@
+apply plugin: 'application'
+apply plugin: 'kotlin'
+
+java {
+  sourceCompatibility = JavaVersion.VERSION_17
+  targetCompatibility = JavaVersion.VERSION_17
+}
+
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+  compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+}
+
+def mainClassName = 'cl.xiombo.faro.lwjgl3.Lwjgl3LauncherKt'
+
+application {
+  mainClass = mainClassName
+}
+
+// Los assets van dentro del jar; libGDX los busca en el classpath si no están en disco.
+sourceSets.main.resources.srcDirs += [rootProject.file('assets').path]
+
+dependencies {
+  implementation project(':core')
+  implementation "com.badlogicgames.gdx:gdx-backend-lwjgl3:$gdxVersion"
+  implementation "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-desktop"
+}
+
+run {
+  workingDir = rootProject.file('assets')
+  ignoreExitValue = true
+}
+
+// Jar ejecutable con todas las dependencias: java -jar FaroHundido.jar
+jar {
+  archiveFileName = "FaroHundido-${project.version}.jar"
+  duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+  dependsOn configurations.runtimeClasspath
+  from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+  exclude('META-INF/INDEX.LIST', 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA', 'META-INF/maven/**')
+  manifest {
+    attributes 'Main-Class': mainClassName
+  }
+}

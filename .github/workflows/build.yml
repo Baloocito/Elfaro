@@ -1,0 +1,57 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Compilar APK (Android) y JAR (PC)
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace android:assembleDebug lwjgl3:jar
+
+      - name: Preparar archivos
+        run: |
+          mkdir -p dist
+          cp android/build/outputs/apk/debug/android-debug.apk dist/FaroHundido.apk
+          cp lwjgl3/build/libs/FaroHundido-*.jar dist/FaroHundido.jar
+          ls -la dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: faro-hundido-${{ github.sha }}
+          path: dist/
+
+      # Release "dev" siempre apunta al último build: el link de descarga no cambia.
+      - name: Publicar release dev
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete dev --yes --cleanup-tag || true
+          gh release create dev dist/FaroHundido.apk dist/FaroHundido.jar \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "Build de desarrollo" \
+            --notes "Commit ${GITHUB_SHA::7}: $(git log -1 --pretty=%s)"

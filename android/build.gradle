@@ -1,0 +1,90 @@
+apply plugin: 'com.android.application'
+apply plugin: 'kotlin-android'
+
+android {
+  namespace 'cl.xiombo.faro'
+  compileSdk 35
+
+  sourceSets {
+    main {
+      manifest.srcFile 'AndroidManifest.xml'
+      java.srcDirs = ['src/main/kotlin']
+      res.srcDirs = ['res']
+      assets.srcDirs = ['../assets']
+      jniLibs.srcDirs = ['libs']
+    }
+  }
+
+  defaultConfig {
+    applicationId 'cl.xiombo.faro'
+    minSdk 24
+    targetSdk 35
+    versionCode 1
+    versionName '0.1.0-f0'
+  }
+
+  // Keystore de desarrollo fija: así cada APK del CI se instala encima del anterior.
+  // Para publicar se usará otra keystore guardada como secreto, nunca en el repo.
+  signingConfigs {
+    dev {
+      storeFile file('debug.keystore')
+      storePassword 'android'
+      keyAlias 'androiddebugkey'
+      keyPassword 'android'
+    }
+  }
+
+  buildTypes {
+    debug {
+      signingConfig signingConfigs.dev
+    }
+    release {
+      minifyEnabled false
+      signingConfig signingConfigs.dev
+    }
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+}
+
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+  compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+}
+
+configurations { natives }
+
+dependencies {
+  implementation project(':core')
+  implementation "com.badlogicgames.gdx:gdx-backend-android:$gdxVersion"
+  natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-armeabi-v7a"
+  natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-arm64-v8a"
+  natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-x86"
+  natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-x86_64"
+}
+
+// Copia las librerías nativas de libGDX (.so) a libs/<abi> antes de empaquetar.
+tasks.register('copyAndroidNatives') {
+  doFirst {
+    configurations.natives.files.each { jar ->
+      def outputDir = null
+      if (jar.name.endsWith('natives-armeabi-v7a.jar')) outputDir = file('libs/armeabi-v7a')
+      if (jar.name.endsWith('natives-arm64-v8a.jar')) outputDir = file('libs/arm64-v8a')
+      if (jar.name.endsWith('natives-x86_64.jar')) outputDir = file('libs/x86_64')
+      if (jar.name.endsWith('natives-x86.jar')) outputDir = file('libs/x86')
+      if (outputDir != null) {
+        copy {
+          from zipTree(jar)
+          into outputDir
+          include '*.so'
+        }
+      }
+    }
+  }
+}
+
+tasks.matching { it.name.contains('merge') && it.name.contains('JniLibFolders') }.configureEach { t ->
+  t.dependsOn 'copyAndroidNatives'
+}
