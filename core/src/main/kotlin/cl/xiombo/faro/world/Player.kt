@@ -93,6 +93,7 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
         }
         if (dashT > 0f) {
             dashT -= dt
+            if (inp.hazBuf > 0f) inp.hazBuf = Balance.INPUT_BUFFER   // se guarda hasta terminar el Destello
             w.room.move(this, dashDx * Balance.DASH_SPEED * dt, dashDy * Balance.DASH_SPEED * dt)
             if (dashTick++ % 3 == 0) w.fx.ghost(x, y)
             vx = dashDx * Balance.SPEED
@@ -101,8 +102,11 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
         }
 
         // Haz: cuesta Luz; no se puede usar con 8 de Luz o menos.
-        if (inp.hazBuf > 0f && hazT <= 0f && !attacking) {
+        // También cancela la recuperación del Farol, para que no se pierda la pulsación.
+        val inRecovery = atkFrame >= Balance.FAROL_STARTUP + Balance.FAROL_ACTIVE
+        if (inp.hazBuf > 0f && hazT <= 0f && (!attacking || inRecovery)) {
             inp.hazBuf = 0f
+            atkFrame = -1
             if (luz > Balance.HAZ_COST) {
                 luz -= Balance.HAZ_COST
                 hazT = Balance.HAZ_TIME
