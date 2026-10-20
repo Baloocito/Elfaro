@@ -38,7 +38,7 @@ jobs:
         if: failure()
         shell: bash
         run: |
-          msg=$(grep -E "^e: |error:|What went wrong|^> |Could not" -A2 build.log | grep -vE "^\s+at " | head -60 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          msg=$(grep -E "^e: |error:|What went wrong|^> |Could not" -A2 build.log | grep -vE "^\s+at |^> Task" | head -60 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
           echo "::error title=Build fallido::${msg}"
 
       - name: Preparar archivos
