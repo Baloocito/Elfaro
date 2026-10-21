@@ -17,12 +17,14 @@ class InputState {
     var attackBuf = 0f
     var dashBuf = 0f
     var hazBuf = 0f
+    var useBuf = 0f
     var anyPressed = false
 
     fun consume(dt: Float) {
         attackBuf = max(0f, attackBuf - dt)
         dashBuf = max(0f, dashBuf - dt)
         hazBuf = max(0f, hazBuf - dt)
+        useBuf = max(0f, useBuf - dt)
         anyPressed = false
     }
 }

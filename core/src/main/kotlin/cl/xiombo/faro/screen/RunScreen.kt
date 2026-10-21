@@ -28,6 +28,7 @@ class RunScreen : KtxScreen {
             if (world.restartRequested) world = World(System.nanoTime())
             acc -= step
         }
+        controls.useVisible = world.interactable != null
         renderer.render(world, acc / step, controls)
     }
 

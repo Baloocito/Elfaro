@@ -31,7 +31,10 @@ class Controls(private val renderer: Renderer) : InputAdapter() {
         private set
     var joyY = 0f
         private set
-    private val btnPtr = intArrayOf(-1, -1, -1)   // 0 Atacar, 1 Destello, 2 Haz
+    private val btnPtr = intArrayOf(-1, -1, -1, -1)   // 0 Atacar, 1 Destello, 2 Haz, 3 Usar
+
+    /** El botón USAR solo aparece cerca de algo con lo que interactuar. */
+    var useVisible = false
     private val tmp = Vector2()
 
     private val bw get() = Gdx.graphics.backBufferWidth.toFloat()
@@ -44,6 +47,7 @@ class Controls(private val renderer: Renderer) : InputAdapter() {
             Btn(bw - 0.17f * u, 0.25f * u, 0.12f * u, "FAROL"),
             Btn(bw - 0.43f * u, 0.13f * u, 0.08f * u, "DESTELLO"),
             Btn(bw - 0.17f * u, 0.53f * u, 0.08f * u, "HAZ"),
+            Btn(bw - 0.43f * u, 0.40f * u, 0.08f * u, "USAR"),
         )
     }
 
@@ -54,6 +58,7 @@ class Controls(private val renderer: Renderer) : InputAdapter() {
             0 -> state.attackBuf = Balance.INPUT_BUFFER
             1 -> state.dashBuf = Balance.INPUT_BUFFER
             2 -> state.hazBuf = Balance.INPUT_BUFFER
+            3 -> state.useBuf = 0.2f
         }
     }
 
@@ -63,6 +68,7 @@ class Controls(private val renderer: Renderer) : InputAdapter() {
             Input.Keys.SPACE, Input.Keys.SHIFT_LEFT -> press(1)
             Input.Keys.J -> press(0)
             Input.Keys.K, Input.Keys.Q -> press(2)
+            Input.Keys.E, Input.Keys.ENTER -> press(3)
             Input.Keys.F1 -> renderer.debug = !renderer.debug
             Input.Keys.F2 -> renderer.lighting = !renderer.lighting
         }
@@ -82,6 +88,7 @@ class Controls(private val renderer: Renderer) : InputAdapter() {
         val y = bh - screenY
         val btns = buttons()
         for (i in btns.indices) {
+            if (i == 3 && !useVisible) continue
             val b = btns[i]
             val r = b.r * 1.25f
             if ((x - b.x) * (x - b.x) + (y - b.y) * (y - b.y) <= r * r) {

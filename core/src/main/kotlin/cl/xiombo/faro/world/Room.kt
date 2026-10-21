@@ -1,89 +1,137 @@
 package cl.xiombo.faro.world
 
 import cl.xiombo.faro.data.Balance.TILE
+import cl.xiombo.faro.data.RoomTemplate
+import cl.xiombo.faro.data.RoomTemplates
 import kotlin.math.floor
-import kotlin.random.Random
 
 /** Cuerpo con caja de colisión centrada en (x, y). Guarda la posición anterior para interpolar al dibujar. */
 open class Body(var x: Float, var y: Float, val hw: Float, val hh: Float) {
     var px = x
     var py = y
+    /** Los que caminan no pueden pisar el agua; lo que flota (medusas, la Sirena) sí. */
+    open val blockedByWater: Boolean get() = true
     fun snapshot() { px = x; py = y }
     fun ix(alpha: Float) = px + (x - px) * alpha
     fun iy(alpha: Float) = py + (y - py) * alpha
 }
 
+enum class Dir(val dx: Int, val dy: Int) {
+    LEFT(-1, 0), RIGHT(1, 0), DOWN(0, -1), UP(0, 1);
+
+    val opposite: Dir
+        get() = when (this) { LEFT -> RIGHT; RIGHT -> LEFT; DOWN -> UP; UP -> DOWN }
+}
+
 /**
- * Sala normal de 26 × 14 tiles (§7). En F0 la distribución es procedural y simple:
- * muros de borde, algunos pilares y una puerta a la derecha que se abre al limpiar la sala.
- * En F1 esto se reemplaza por plantillas hechas en Tiled.
+ * Una sala construida a partir de una plantilla de Tiled. Las puertas se abren solo hacia
+ * salas vecinas; hacia una sala secreta se dibuja una pared agrietada que abre el Haz.
  */
-class Room(seed: Long) {
+class Room(val template: RoomTemplate, val doorSides: Set<Dir>, val crackSide: Dir?) {
     companion object {
-        const val COLS = 26
-        const val ROWS = 14
-        const val WIDTH = COLS * TILE
-        const val HEIGHT = ROWS * TILE
-        val DOOR_ROWS = 6..7
+        const val FLOOR = 0
+        const val WALL = 1
+        const val WATER = 2
+        const val DOOR = 3
+        const val CRACK = 4
     }
 
-    private val solid = BooleanArray(COLS * ROWS)
-    var doorsOpen = false
+    val cols = template.cols
+    val rows = template.rows
+    val width = cols * TILE
+    val height = rows * TILE
+    private val tiles = IntArray(cols * rows)
+    var doorsOpen = true
+
+    var lastRayTx = -1
+        private set
+    var lastRayTy = -1
+        private set
 
     init {
-        for (x in 0 until COLS) { set(x, 0); set(x, ROWS - 1) }
-        for (y in 0 until ROWS) { set(0, y); set(COLS - 1, y) }
-
-        val rng = Random(seed)
-        val target = 3 + rng.nextInt(4)
-        var placed = 0
-        var tries = 0
-        while (placed < target && tries < 80) {
-            tries++
-            val w = 1 + rng.nextInt(2)
-            val h = 1 + rng.nextInt(2)
-            val x = 3 + rng.nextInt(COLS - 6 - w)
-            val y = 2 + rng.nextInt(ROWS - 4 - h)
-            if (x < 5) continue                                        // zona de entrada libre
-            if (x + w > COLS - 5 && y + h > 5 && y < 9) continue        // pasillo hacia la puerta libre
-            var ok = true
-            for (yy in y - 1..y + h) for (xx in x - 1..x + w) {
-                if (xx in 1 until COLS - 1 && yy in 1 until ROWS - 1 && solid[yy * COLS + xx]) ok = false
+        for (i in tiles.indices) {
+            tiles[i] = when (template.terrain[i]) {
+                RoomTemplates.T_WALL -> WALL
+                RoomTemplates.T_WATER -> WATER
+                else -> FLOOR
             }
-            if (!ok) continue
-            for (yy in y until y + h) for (xx in x until x + w) set(xx, yy)
-            placed++
+        }
+        for (side in doorSides) carve(side, DOOR)
+        if (crackSide != null) carve(crackSide, CRACK)
+    }
+
+    /** Tiles del hueco de la puerta en un lado (2 tiles en el centro de la pared). */
+    fun gapTiles(side: Dir): List<IntArray> {
+        val ry = listOf(rows / 2 - 1, rows / 2)
+        val cx = listOf(cols / 2 - 1, cols / 2)
+        return when (side) {
+            Dir.LEFT -> ry.map { intArrayOf(0, it) }
+            Dir.RIGHT -> ry.map { intArrayOf(cols - 1, it) }
+            Dir.DOWN -> cx.map { intArrayOf(it, 0) }
+            Dir.UP -> cx.map { intArrayOf(it, rows - 1) }
         }
     }
 
-    private fun set(x: Int, y: Int) { solid[y * COLS + x] = true }
-
-    fun isDoor(tx: Int, ty: Int) = tx == COLS - 1 && ty in DOOR_ROWS
-    fun isEntrance(tx: Int, ty: Int) = tx == 0 && ty in DOOR_ROWS
-
-    fun isSolidTile(tx: Int, ty: Int): Boolean {
-        if (tx < 0 || ty < 0 || tx >= COLS || ty >= ROWS) return true
-        if (doorsOpen && isDoor(tx, ty)) return false
-        return solid[ty * COLS + tx]
+    private fun carve(side: Dir, gapType: Int) {
+        for (g in gapTiles(side)) {
+            set(g[0], g[1], gapType)
+            // Pasillo de 3 tiles hacia dentro siempre libre.
+            for (k in 1..3) {
+                val tx = g[0] - side.dx * k
+                val ty = g[1] - side.dy * k
+                set(tx, ty, FLOOR)
+            }
+        }
     }
 
-    fun isSolidAt(x: Float, y: Float) = isSolidTile(floor(x / TILE).toInt(), floor(y / TILE).toInt())
+    private fun set(tx: Int, ty: Int, v: Int) {
+        if (tx in 0 until cols && ty in 0 until rows) tiles[ty * cols + tx] = v
+    }
 
-    fun boxHits(cx: Float, cy: Float, hw: Float, hh: Float): Boolean {
+    fun tileAt(tx: Int, ty: Int): Int =
+        if (tx < 0 || ty < 0 || tx >= cols || ty >= rows) WALL else tiles[ty * cols + tx]
+
+    fun isDoorGap(tx: Int, ty: Int) = tileAt(tx, ty) == DOOR
+    fun isCrack(tx: Int, ty: Int) = tileAt(tx, ty) == CRACK
+    fun isWater(tx: Int, ty: Int) = tileAt(tx, ty) == WATER
+    fun isWaterAt(x: Float, y: Float) = isWater(floor(x / TILE).toInt(), floor(y / TILE).toInt())
+
+    fun isSolidTile(tx: Int, ty: Int, water: Boolean = false): Boolean = when (tileAt(tx, ty)) {
+        WALL, CRACK -> true
+        WATER -> water
+        DOOR -> !doorsOpen
+        else -> false
+    }
+
+    fun isSolidAt(x: Float, y: Float, water: Boolean = false) =
+        isSolidTile(floor(x / TILE).toInt(), floor(y / TILE).toInt(), water)
+
+    fun boxHits(cx: Float, cy: Float, hw: Float, hh: Float, water: Boolean = false): Boolean {
         val x0 = floor((cx - hw) / TILE).toInt()
         val x1 = floor((cx + hw - 0.01f) / TILE).toInt()
         val y0 = floor((cy - hh) / TILE).toInt()
         val y1 = floor((cy + hh - 0.01f) / TILE).toInt()
-        for (ty in y0..y1) for (tx in x0..x1) if (isSolidTile(tx, ty)) return true
+        for (ty in y0..y1) for (tx in x0..x1) if (isSolidTile(tx, ty, water)) return true
+        return false
+    }
+
+    /** ¿Toca la caja algún tile de agua? */
+    fun boxTouchesWater(cx: Float, cy: Float, hw: Float, hh: Float): Boolean {
+        val x0 = floor((cx - hw) / TILE).toInt()
+        val x1 = floor((cx + hw - 0.01f) / TILE).toInt()
+        val y0 = floor((cy - hh) / TILE).toInt()
+        val y1 = floor((cy + hh - 0.01f) / TILE).toInt()
+        for (ty in y0..y1) for (tx in x0..x1) if (isWater(tx, ty)) return true
         return false
     }
 
     /** Física AABB sobre rejilla (§11, sin Box2D). Mueve eje por eje; devuelve true si chocó. */
     fun move(b: Body, dx: Float, dy: Float): Boolean {
+        val water = b.blockedByWater
         var hit = false
         if (dx != 0f) {
             b.x += dx
-            if (boxHits(b.x, b.y, b.hw, b.hh)) {
+            if (boxHits(b.x, b.y, b.hw, b.hh, water)) {
                 hit = true
                 b.x = if (dx > 0f) floor((b.x + b.hw) / TILE) * TILE - b.hw - 0.01f
                 else (floor((b.x - b.hw) / TILE) + 1f) * TILE + b.hw + 0.01f
@@ -91,7 +139,7 @@ class Room(seed: Long) {
         }
         if (dy != 0f) {
             b.y += dy
-            if (boxHits(b.x, b.y, b.hw, b.hh)) {
+            if (boxHits(b.x, b.y, b.hw, b.hh, water)) {
                 hit = true
                 b.y = if (dy > 0f) floor((b.y + b.hh) / TILE) * TILE - b.hh - 0.01f
                 else (floor((b.y - b.hh) / TILE) + 1f) * TILE + b.hh + 0.01f
@@ -100,13 +148,47 @@ class Room(seed: Long) {
         return hit
     }
 
-    /** Distancia hasta el primer muro siguiendo una dirección (para el Haz). */
+    /** Distancia hasta el primer muro (el agua no frena el Haz). Guarda el tile golpeado. */
     fun rayLength(x: Float, y: Float, dx: Float, dy: Float, max: Float): Float {
         var t = 0f
+        lastRayTx = -1
+        lastRayTy = -1
         while (t < max) {
-            if (isSolidAt(x + dx * t, y + dy * t)) return t
+            val tx = floor((x + dx * t) / TILE).toInt()
+            val ty = floor((y + dy * t) / TILE).toInt()
+            if (isSolidTile(tx, ty)) {
+                lastRayTx = tx
+                lastRayTy = ty
+                return t
+            }
             t += 2f
         }
         return max
+    }
+
+    fun openCrack() {
+        for (i in tiles.indices) if (tiles[i] == CRACK) tiles[i] = DOOR
+    }
+
+    fun tileCenter(tx: Int, ty: Int) = floatArrayOf(tx * TILE + TILE / 2f, ty * TILE + TILE / 2f)
+
+    /** Punto de entrada al llegar por un lado (dentro de la sala, frente a la puerta). */
+    fun entryPoint(side: Dir): FloatArray = when (side) {
+        Dir.LEFT -> floatArrayOf(TILE * 1.6f, (rows / 2) * TILE.toFloat() - 2f)
+        Dir.RIGHT -> floatArrayOf(width - TILE * 1.6f, (rows / 2) * TILE.toFloat() - 2f)
+        Dir.DOWN -> floatArrayOf((cols / 2) * TILE.toFloat(), TILE * 1.4f)
+        Dir.UP -> floatArrayOf((cols / 2) * TILE.toFloat(), height - TILE * 2.2f)
+    }
+
+    /** Tile libre más cercano al punto (para colocar objetos). */
+    fun nearestFloor(x: Float, y: Float): FloatArray {
+        val cx = floor(x / TILE).toInt()
+        val cy = floor(y / TILE).toInt()
+        for (r in 0..8) for (dy in -r..r) for (dx in -r..r) {
+            val tx = cx + dx
+            val ty = cy + dy
+            if (tileAt(tx, ty) == FLOOR) return tileCenter(tx, ty)
+        }
+        return floatArrayOf(x, y)
     }
 }

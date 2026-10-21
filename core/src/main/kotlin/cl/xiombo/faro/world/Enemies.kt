@@ -7,32 +7,48 @@ import cl.xiombo.faro.data.Pal
 import cl.xiombo.faro.util.approach
 import cl.xiombo.faro.util.dist
 import cl.xiombo.faro.util.turnToward
+import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.math.MathUtils
+import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-enum class HitKind { MELEE, HAZ, BURN, BLAST }
+enum class HitKind { MELEE, HAZ, BURN, BLAST, SLAM, LAMP }
 
 /** Todo ataque tiene un estado de aviso propio (TELEGRAPH) de 0,35 s como mínimo (§1). */
 enum class EState { MOVE, TELEGRAPH, ATTACK, RECOVER, DYING }
 
-fun createEnemy(id: String, x: Float, y: Float, floor: Int): Enemy {
+/** Afijos de élite (§5). Élite: vida ×2,5, daño ×1,3, suelta 6 Luz y 30 % de exvoto. */
+enum class Affix(val label: String, val color: Color) {
+    SALADO("Salado", Pal.SALADO),
+    BRILLANTE("Brillante", Pal.BRILLANTE),
+    GEMELO("Gemelo", Pal.GEMELO),
+    HAMBRIENTO("Hambriento", Pal.HAMBRIENTO),
+}
+
+fun createEnemy(id: String, x: Float, y: Float, floor: Int, affix: Affix? = null): Enemy {
     val def = EnemyDefs[id]
     return when (id) {
-        "ahogado" -> Ahogado(def, x, y, floor)
-        "medusa" -> Medusa(def, x, y, floor)
-        "cangrejo" -> Cangrejo(def, x, y, floor)
+        "ahogado" -> Ahogado(def, x, y, floor, affix)
+        "medusa" -> Medusa(def, x, y, floor, affix)
+        "cangrejo" -> Cangrejo(def, x, y, floor, affix)
+        "sirena" -> Sirena(def, x, y)
         else -> error("Enemigo desconocido: $id")
     }
 }
 
-abstract class Enemy(val def: EnemyDef, x: Float, y: Float, floor: Int) : Body(x, y, def.hw, def.hh) {
-    val maxHp = def.hp * Balance.hpMul(floor)
+abstract class Enemy(val def: EnemyDef, x: Float, y: Float, val floor: Int, val affix: Affix?) :
+    Body(x, y, def.hw, def.hh) {
+    val isElite = affix != null
+    open val isBoss: Boolean get() = false
+
+    val maxHp = def.hp * Balance.hpMul(floor) * (if (affix != null) 2.5f else 1f)
     var hp = maxHp
-    val dmg = def.dmg * Balance.dmgMul(floor)
+    val dmg = def.dmg * Balance.dmgMul(floor) * (if (affix != null) 1.3f else 1f)
     val speed = def.speed * Balance.speedMul(floor)
 
     var state = EState.MOVE
@@ -40,32 +56,60 @@ abstract class Enemy(val def: EnemyDef, x: Float, y: Float, floor: Int) : Body(x
     var cd = MathUtils.random(0.4f, 1.0f)
     var flash = 0f
     var burnT = 0f
+    var slowT = 0f
+    private var slowMul = 1f
     var kbX = 0f
     var kbY = 0f
+    private var slamArmed = false
     var dirX = 1f
     var dirY = 0f
     var anim = MathUtils.random(10f)
+    var hitByPlayer = false
+    var split = false
+    private var puddleT = 0f
 
     /** killed: ya soltó Luz y cuenta como baja. dead: se retira de la lista. */
     var killed = false
     var dead = false
 
     val radius get() = max(hw, hh)
+    val slowed get() = slowT > 0f
+    val spd get() = if (slowed) speed * slowMul else speed
     open val targetable get() = !killed
-    open val lightRadius: Float get() = if (state == EState.TELEGRAPH) 22f else 0f
+    open val lightRadius: Float
+        get() = when {
+            affix == Affix.BRILLANTE && !killed -> 40f
+            state == EState.TELEGRAPH -> 22f
+            else -> 0f
+        }
 
     fun update(w: World, dt: Float) {
         anim += dt
         flash -= dt
+        slowT -= dt
         if (burnT > 0f && !killed) {
             burnT -= dt
             takeHit(w, Balance.BURN_DPS * dt, x, y, HitKind.BURN)
             if (MathUtils.randomBoolean(0.25f)) w.fx.ember(x, y)
         }
         if (kbX != 0f || kbY != 0f) {
-            w.room.move(this, kbX * dt, kbY * dt)
+            val hit = w.room.move(this, kbX * dt, kbY * dt)
+            if (hit && slamArmed && w.stats.wallSlam && !killed) {
+                slamArmed = false
+                takeHit(w, 25f, x, y, HitKind.SLAM)
+                w.fx.spark(x, y)
+                w.fx.floater("25", x, y + 12f, Pal.TIDE)
+                w.addShake(2f)
+            }
             kbX = approach(kbX, 0f, 700f * dt)
             kbY = approach(kbY, 0f, 700f * dt)
+        }
+        if (affix == Affix.SALADO && !killed) {
+            puddleT -= dt
+            if (puddleT <= 0f) {
+                puddleT = 0.6f
+                w.addPuddle(x, y - hh + 2f)
+            }
         }
         if (!dead) think(w, dt)
     }
@@ -75,8 +119,15 @@ abstract class Enemy(val def: EnemyDef, x: Float, y: Float, floor: Int) : Body(x
     open fun takeHit(w: World, amount: Float, fromX: Float, fromY: Float, kind: HitKind): Boolean {
         if (!targetable) return false
         hp -= amount
-        if (kind == HitKind.MELEE || kind == HitKind.BLAST) flash = 0.1f
-        else if (kind == HitKind.HAZ) flash = 0.03f
+        when (kind) {
+            HitKind.MELEE, HitKind.BLAST, HitKind.SLAM, HitKind.LAMP -> flash = 0.1f
+            HitKind.HAZ -> flash = 0.03f
+            HitKind.BURN -> {}
+        }
+        if (affix == Affix.GEMELO && !split && hp > 0f && hp <= maxHp / 2f) {
+            split = true
+            w.splitTwin(this)
+        }
         if (hp <= 0f) {
             hp = 0f
             killed = true
@@ -88,25 +139,36 @@ abstract class Enemy(val def: EnemyDef, x: Float, y: Float, floor: Int) : Body(x
 
     protected open fun onKilled(w: World) { dead = true }
 
-    fun knock(dx: Float, dy: Float, force: Float) { kbX = dx * force; kbY = dy * force }
+    fun knock(dx: Float, dy: Float, force: Float) {
+        if (isBoss) return
+        kbX = dx * force
+        kbY = dy * force
+        slamArmed = true
+    }
+
     fun burn(t: Float) { burnT = max(burnT, t) }
+
+    fun slow(mul: Float, t: Float) {
+        if (!slowed || mul < slowMul) slowMul = mul
+        slowT = max(slowT, t)
+    }
 
     protected fun beginTelegraph(t: Float) { state = EState.TELEGRAPH; stateT = t }
 }
 
 /** Ahogado: persigue y embiste 40 px tras agacharse y brillar 0,4 s. */
-class Ahogado(def: EnemyDef, x: Float, y: Float, floor: Int) : Enemy(def, x, y, floor) {
+class Ahogado(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) : Enemy(def, x, y, floor, affix) {
     private var hitDone = false
 
     override fun think(w: World, dt: Float) {
         val p = w.player
-        val dx = p.cx - x
-        val dy = p.cy - y
+        val dx = w.targetX - x
+        val dy = w.targetY - y
         val d = max(0.001f, sqrt(dx * dx + dy * dy))
         when (state) {
             EState.MOVE -> {
                 cd -= dt
-                if (d > 22f) w.room.move(this, dx / d * speed * dt, dy / d * speed * dt)
+                if (d > 22f) w.room.move(this, dx / d * spd * dt, dy / d * spd * dt)
                 if (d < def.range + 10f && cd <= 0f) {
                     dirX = dx / d; dirY = dy / d
                     beginTelegraph(def.telegraph)
@@ -118,7 +180,7 @@ class Ahogado(def: EnemyDef, x: Float, y: Float, floor: Int) : Enemy(def, x, y, 
             }
             EState.ATTACK -> {
                 w.room.move(this, dirX * LUNGE_SPEED * dt, dirY * LUNGE_SPEED * dt)
-                if (!hitDone && p.hurtOverlaps(x, y, radius) && w.hurtPlayer(dmg, x, y)) hitDone = true
+                if (!hitDone && p.hurtOverlaps(x, y, radius) && w.hurtPlayer(dmg, x, y, this)) hitDone = true
                 stateT -= dt
                 if (stateT <= 0f) { state = EState.RECOVER; stateT = 0.45f }
             }
@@ -136,10 +198,12 @@ class Ahogado(def: EnemyDef, x: Float, y: Float, floor: Int) : Enemy(def, x, y, 
     }
 }
 
-/** Medusa-farol: flota y emite luz. Pulso eléctrico con aviso; al morir explota en 1 s (radio 32 px). */
-class Medusa(def: EnemyDef, x: Float, y: Float, floor: Int) : Enemy(def, x, y, floor) {
+/** Medusa-farol: flota y emite luz. Pulso con aviso; al morir explota en 1 s (radio 32 px). */
+class Medusa(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) : Enemy(def, x, y, floor, affix) {
     var explodeT = 0f
         private set
+
+    override val blockedByWater: Boolean get() = false
 
     override val lightRadius: Float
         get() = when {
@@ -155,8 +219,8 @@ class Medusa(def: EnemyDef, x: Float, y: Float, floor: Int) : Enemy(def, x, y, f
             return
         }
         val p = w.player
-        val dx = p.cx - x
-        val dy = p.cy - y
+        val dx = w.targetX - x
+        val dy = w.targetY - y
         val d = max(0.001f, sqrt(dx * dx + dy * dy))
         when (state) {
             EState.MOVE -> {
@@ -165,14 +229,14 @@ class Medusa(def: EnemyDef, x: Float, y: Float, floor: Int) : Enemy(def, x, y, f
                 if (d > 16f) {
                     val mx = dx / d - dy / d * wob
                     val my = dy / d + dx / d * wob
-                    w.room.move(this, mx * speed * dt, my * speed * dt)
+                    w.room.move(this, mx * spd * dt, my * spd * dt)
                 }
                 if (d < PULSE_R + 6f && cd <= 0f) beginTelegraph(def.telegraph)
             }
             EState.TELEGRAPH -> {
                 stateT -= dt
                 if (stateT <= 0f) {
-                    if (p.hurtOverlaps(x, y, PULSE_R)) w.hurtPlayer(dmg, x, y)
+                    if (p.hurtOverlaps(x, y, PULSE_R)) w.hurtPlayer(dmg, x, y, this)
                     w.fx.ring(x, y, PULSE_R, Pal.MEDUSA)
                     w.fx.burst(x, y, 8, Pal.MEDUSA, 90f, 0.25f)
                     state = EState.RECOVER
@@ -195,7 +259,7 @@ class Medusa(def: EnemyDef, x: Float, y: Float, floor: Int) : Enemy(def, x, y, f
     private fun explode(w: World) {
         dead = true
         val p = w.player
-        if (p.hurtOverlaps(x, y, BLAST_R)) w.hurtPlayer(dmg * 1.5f, x, y)
+        if (p.hurtOverlaps(x, y, BLAST_R)) w.hurtPlayer(dmg * 1.5f, x, y, null)
         for (o in w.enemies) {
             if (o === this || !o.targetable) continue
             if (dist(x, y, o.x, o.y) <= BLAST_R + o.radius) o.takeHit(w, BLAST_DMG, x, y, HitKind.BLAST)
@@ -215,7 +279,7 @@ class Medusa(def: EnemyDef, x: Float, y: Float, floor: Int) : Enemy(def, x, y, f
  * Cangrejo-relicario: se mueve de lado y gira despacio. Inmune de frente al Farol:
  * hay que rodearlo (el Destello sirve para eso) o usar el Haz.
  */
-class Cangrejo(def: EnemyDef, x: Float, y: Float, floor: Int) : Enemy(def, x, y, floor) {
+class Cangrejo(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) : Enemy(def, x, y, floor, affix) {
     var face = MathUtils.random(MathUtils.PI2)
         private set
     private var side = if (MathUtils.randomBoolean()) 1f else -1f
@@ -224,10 +288,11 @@ class Cangrejo(def: EnemyDef, x: Float, y: Float, floor: Int) : Enemy(def, x, y,
 
     override fun think(w: World, dt: Float) {
         val p = w.player
-        val dx = p.cx - x
-        val dy = p.cy - y
+        val dx = w.targetX - x
+        val dy = w.targetY - y
         val d = max(0.001f, sqrt(dx * dx + dy * dy))
-        if (state == EState.MOVE || state == EState.RECOVER) face = turnToward(face, atan2(dy, dx), TURN * dt)
+        val turn = if (slowed) TURN * 0.6f else TURN
+        if (state == EState.MOVE || state == EState.RECOVER) face = turnToward(face, atan2(dy, dx), turn * dt)
         val fx = cos(face)
         val fy = sin(face)
         when (state) {
@@ -239,7 +304,7 @@ class Cangrejo(def: EnemyDef, x: Float, y: Float, floor: Int) : Enemy(def, x, y,
                 var my = fx * side
                 if (d > 44f) { mx += fx * 0.8f; my += fy * 0.8f } else if (d < 18f) { mx -= fx * 0.6f; my -= fy * 0.6f }
                 val l = max(0.001f, sqrt(mx * mx + my * my))
-                if (w.room.move(this, mx / l * speed * dt, my / l * speed * dt)) side = -side
+                if (w.room.move(this, mx / l * spd * dt, my / l * spd * dt)) side = -side
                 if (d < def.range + 8f && cd <= 0f) beginTelegraph(def.telegraph)
             }
             EState.TELEGRAPH -> {
@@ -247,7 +312,7 @@ class Cangrejo(def: EnemyDef, x: Float, y: Float, floor: Int) : Enemy(def, x, y,
                 if (stateT <= 0f) { state = EState.ATTACK; stateT = 0.12f; hitDone = false }
             }
             EState.ATTACK -> {
-                if (!hitDone && p.hurtOverlaps(x + fx * 14f, y + fy * 14f, 12f) && w.hurtPlayer(dmg, x, y)) hitDone = true
+                if (!hitDone && p.hurtOverlaps(x + fx * 14f, y + fy * 14f, 12f) && w.hurtPlayer(dmg, x, y, this)) hitDone = true
                 stateT -= dt
                 if (stateT <= 0f) { state = EState.RECOVER; stateT = 0.6f }
             }
@@ -276,5 +341,133 @@ class Cangrejo(def: EnemyDef, x: Float, y: Float, floor: Int) : Enemy(def, x, y,
     companion object {
         const val TURN = 2.2f          // rad/s
         const val FRONT_COS = 0.34f    // ±70° se considera "de frente"
+    }
+}
+
+/**
+ * La Sirena de Brea (§5), 900 de vida.
+ * Fase 1: canta; las notas son proyectiles lentos en espiral, alternando con abanicos dirigidos.
+ * Fase 2 (60 %): la brea inunda la sala y apaga tu luz un 30 %; doble espiral y abanicos más anchos.
+ * Fase 3 (25 %): se sumerge y emerge bajo ti con un aviso de burbujas de 0,6 s, tres veces seguidas.
+ */
+class Sirena(def: EnemyDef, x: Float, y: Float) : Enemy(def, x, y, 1, null) {
+    enum class Act { INTRO, IDLE, SING_TELE, SING, AIM_TELE, AIM, ROAR, DIVE, BUBBLES, EXPOSED }
+
+    override val isBoss: Boolean get() = true
+    override val blockedByWater: Boolean get() = false
+
+    var phase = 1
+        private set
+    var act = Act.INTRO
+        private set
+    var actT = 1.8f
+        private set
+    var actMax = 1.8f
+        private set
+    private val homeX = x
+    private val homeY = y
+    var bubbleX = 0f
+        private set
+    var bubbleY = 0f
+        private set
+    private var spiralA = 0f
+    private var emitT = 0f
+    private var dives = 0
+    private var pattern = 0
+    var aimA = -PI.toFloat() / 2f
+        private set
+
+    val submerged get() = (act == Act.DIVE && actT < 0.25f) || act == Act.BUBBLES
+    override val targetable get() = !killed && act != Act.INTRO && act != Act.ROAR && !submerged
+    override val lightRadius: Float
+        get() = when {
+            killed || submerged -> 0f
+            act == Act.SING_TELE || act == Act.AIM_TELE || act == Act.ROAR -> 80f
+            else -> 58f
+        }
+
+    private fun setAct(a: Act, t: Float) { act = a; actT = t; actMax = t }
+
+    override fun think(w: World, dt: Float) {
+        if (killed) return
+        actT -= dt
+        if (phase == 1 && hp <= maxHp * 0.6f) {
+            phase = 2; setAct(Act.ROAR, 1.2f); w.onBossPhase(2); return
+        }
+        if (phase == 2 && hp <= maxHp * 0.25f) {
+            phase = 3; dives = 0; setAct(Act.ROAR, 1.2f); w.onBossPhase(3); return
+        }
+        val p = w.player
+        when (act) {
+            Act.INTRO -> if (actT <= 0f) setAct(Act.IDLE, 0.6f)
+            Act.IDLE -> {
+                val tx = homeX + sin(anim * 0.6f) * 70f
+                x += (tx - x) * min(1f, dt * 2f)
+                y += (homeY - y) * min(1f, dt * 2f)
+                if (actT <= 0f) next()
+            }
+            Act.ROAR -> if (actT <= 0f) { if (phase == 3) setAct(Act.DIVE, 0.5f) else setAct(Act.IDLE, 0.6f) }
+            Act.SING_TELE -> if (actT <= 0f) { setAct(Act.SING, if (phase == 1) 2.4f else 2.8f); emitT = 0f }
+            Act.SING -> {
+                emitT -= dt
+                if (emitT <= 0f) {
+                    emitT = if (phase == 1) 0.10f else 0.08f
+                    val arms = if (phase == 1) 1 else 2
+                    val sp = if (phase == 1) 60f else 72f
+                    for (k in 0 until arms) {
+                        val a = spiralA + k * PI.toFloat()
+                        w.shoot(x, y, cos(a) * sp, sin(a) * sp, dmg)
+                    }
+                    spiralA += 0.37f
+                }
+                if (actT <= 0f) { if (phase == 3) setAct(Act.DIVE, 0.5f) else setAct(Act.IDLE, 1.0f) }
+            }
+            Act.AIM_TELE -> {
+                if (actT > 0.15f) aimA = atan2(p.cy - y, p.cx - x)   // el último instante queda fijo
+                if (actT <= 0f) {
+                    val n = if (phase == 1) 5 else 7
+                    for (i in 0 until n) {
+                        val a = aimA + (i - (n - 1) / 2f) * 0.2f
+                        w.shoot(x, y, cos(a) * 115f, sin(a) * 115f, dmg)
+                    }
+                    setAct(Act.AIM, 0.3f)
+                }
+            }
+            Act.AIM -> if (actT <= 0f) setAct(Act.IDLE, 1.0f)
+            Act.DIVE -> if (actT <= 0f) {
+                bubbleX = p.cx
+                bubbleY = p.y
+                setAct(Act.BUBBLES, 0.6f)
+            }
+            Act.BUBBLES -> if (actT <= 0f) {
+                x = bubbleX
+                y = bubbleY
+                snapshot()
+                if (p.hurtOverlaps(x, y, EMERGE_R)) w.hurtPlayer(dmg * 1.6f, x, y, this)
+                w.fx.ring(x, y, EMERGE_R, Pal.CORAL)
+                w.fx.burst(x, y, 16, Pal.BREA, 130f, 0.5f)
+                w.fx.burst(x, y, 8, Pal.FOAM, 100f, 0.4f)
+                w.addShake(3f)
+                setAct(Act.EXPOSED, 1.1f)
+            }
+            Act.EXPOSED -> if (actT <= 0f) {
+                dives++
+                if (dives < 3) setAct(Act.DIVE, 0.5f)
+                else {
+                    dives = 0
+                    x = homeX; y = homeY; snapshot()
+                    setAct(Act.SING_TELE, 0.6f)
+                }
+            }
+        }
+    }
+
+    private fun next() {
+        pattern++
+        if (pattern % 2 == 1) setAct(Act.SING_TELE, def.telegraph) else setAct(Act.AIM_TELE, 0.5f)
+    }
+
+    companion object {
+        const val EMERGE_R = 26f
     }
 }
