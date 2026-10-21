@@ -2,6 +2,7 @@ package cl.xiombo.faro.input
 
 import cl.xiombo.faro.data.Balance
 import cl.xiombo.faro.render.Renderer
+import cl.xiombo.faro.screen.PauseMenu
 import cl.xiombo.faro.util.len
 import cl.xiombo.faro.world.World
 import com.badlogic.gdx.Application
@@ -9,17 +10,35 @@ import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.Input
 import com.badlogic.gdx.InputAdapter
 import com.badlogic.gdx.math.Vector2
+import kotlin.math.cos
 import kotlin.math.min
+import kotlin.math.sqrt
 
 /**
- * Teclado + ratón en PC; joystick virtual y botones en Android (§3).
+ * Teclado + ratón en PC, joystick virtual y botones en Android, y mando Bluetooth/USB en ambos (§3).
  * Las coordenadas táctiles están en píxeles del backbuffer.
  */
 class Controls(private val renderer: Renderer) : InputAdapter() {
     class Btn(val x: Float, val y: Float, val r: Float, val label: String)
 
+    /** Eventos de menú de este fotograma (los consume RunScreen). */
+    class MenuInput {
+        var pause = false
+        var up = false
+        var down = false
+        var confirm = false
+        var back = false
+        var tapItem = -1
+        fun clear() { pause = false; up = false; down = false; confirm = false; back = false; tapItem = -1 }
+    }
+
     val state = InputState()
+    val menuInput = MenuInput()
     val touch = Gdx.app.type == Application.ApplicationType.Android
+
+    /** true mientras se juega con mando: oculta los controles táctiles e ignora el ratón para apuntar. */
+    var padActive = false
+    var menuOpen = false
 
     var joyPtr = -1
         private set
@@ -31,7 +50,7 @@ class Controls(private val renderer: Renderer) : InputAdapter() {
         private set
     var joyY = 0f
         private set
-    private val btnPtr = intArrayOf(-1, -1, -1, -1)   // 0 Atacar, 1 Destello, 2 Haz, 3 Usar
+    private val btnPtr = intArrayOf(-1, -1, -1, -1)   // 0 Farol, 1 Destello, 2 Haz, 3 Usar
 
     /** El botón USAR solo aparece cerca de algo con lo que interactuar. */
     var useVisible = false
@@ -40,6 +59,7 @@ class Controls(private val renderer: Renderer) : InputAdapter() {
     private val bw get() = Gdx.graphics.backBufferWidth.toFloat()
     private val bh get() = Gdx.graphics.backBufferHeight.toFloat()
     val joyRadius get() = 0.12f * bh
+    val showTouchUi get() = touch && !padActive
 
     fun buttons(): List<Btn> {
         val u = bh
@@ -50,6 +70,9 @@ class Controls(private val renderer: Renderer) : InputAdapter() {
             Btn(bw - 0.43f * u, 0.40f * u, 0.08f * u, "USAR"),
         )
     }
+
+    /** Botón de pausa táctil, arriba al centro. */
+    fun pauseButton() = Btn(bw / 2f, bh - 0.07f * bh, 0.05f * bh, "II")
 
     fun isPressed(i: Int) = btnPtr[i] != -1
 
@@ -63,12 +86,23 @@ class Controls(private val renderer: Renderer) : InputAdapter() {
     }
 
     override fun keyDown(keycode: Int): Boolean {
+        if (menuOpen) {
+            when (keycode) {
+                Input.Keys.UP, Input.Keys.W -> menuInput.up = true
+                Input.Keys.DOWN, Input.Keys.S -> menuInput.down = true
+                Input.Keys.ENTER, Input.Keys.SPACE, Input.Keys.E -> menuInput.confirm = true
+                Input.Keys.ESCAPE, Input.Keys.BACK, Input.Keys.P -> menuInput.back = true
+            }
+            return true
+        }
+        padActive = false
         state.anyPressed = true
         when (keycode) {
             Input.Keys.SPACE, Input.Keys.SHIFT_LEFT -> press(1)
             Input.Keys.J -> press(0)
             Input.Keys.K, Input.Keys.Q -> press(2)
             Input.Keys.E, Input.Keys.ENTER -> press(3)
+            Input.Keys.ESCAPE, Input.Keys.P, Input.Keys.BACK -> menuInput.pause = true
             Input.Keys.F1 -> renderer.debug = !renderer.debug
             Input.Keys.F2 -> renderer.lighting = !renderer.lighting
             Input.Keys.F3, Input.Keys.F4, Input.Keys.F5, Input.Keys.F6 ->
@@ -78,16 +112,29 @@ class Controls(private val renderer: Renderer) : InputAdapter() {
     }
 
     override fun touchDown(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean {
+        if (menuOpen) {
+            renderer.screenToInternal(screenX.toFloat(), screenY.toFloat(), tmp)
+            menuInput.tapItem = PauseMenu.itemAt(tmp.x, tmp.y)
+            return true
+        }
         state.anyPressed = true
         if (!touch) {
+            padActive = false
             when (button) {
                 Input.Buttons.LEFT -> press(0)
                 Input.Buttons.RIGHT -> press(2)
             }
             return true
         }
+        padActive = false
         val x = screenX.toFloat()
         val y = bh - screenY
+        val pb = pauseButton()
+        val pr = pb.r * 1.4f
+        if ((x - pb.x) * (x - pb.x) + (y - pb.y) * (y - pb.y) <= pr * pr) {
+            menuInput.pause = true
+            return true
+        }
         val btns = buttons()
         for (i in btns.indices) {
             if (i == 3 && !useVisible) continue
@@ -121,8 +168,24 @@ class Controls(private val renderer: Renderer) : InputAdapter() {
         return true
     }
 
+    /** Botones del mando: se aplican una vez por fotograma, como pulsaciones con búfer. */
+    fun applyPadButtons(pad: Gamepad) {
+        if (pad.controller == null) return
+        if (pad.anyInput) {
+            padActive = true
+            joyPtr = -1
+            btnPtr.fill(-1)
+        }
+        if (pad.pressed[Action.ATTACK.ordinal] || pad.held[Action.ATTACK.ordinal]) press(0)  // mantener = combo
+        if (pad.pressed[Action.DASH.ordinal]) press(1)
+        if (pad.pressed[Action.HAZ.ordinal]) press(2)
+        if (pad.pressed[Action.USE.ordinal]) press(3)
+        if (pad.pressed.any { it } || pad.confirm) state.anyPressed = true
+        if (pad.startPressed) menuInput.pause = true
+    }
+
     /** Se llama una vez por tick de lógica, antes de World.update. */
-    fun poll(w: World) {
+    fun poll(w: World, pad: Gamepad) {
         var mx = 0f
         var my = 0f
         val k = Gdx.input
@@ -141,21 +204,65 @@ class Controls(private val renderer: Renderer) : InputAdapter() {
                 my = dy / d * m
             }
         }
+        if (padActive && (pad.lx != 0f || pad.ly != 0f)) {
+            mx = pad.lx
+            my = pad.ly
+        }
         val l = len(mx, my)
         if (l > 1f) { mx /= l; my /= l }
         state.mx = mx
         state.my = my
 
-        if (!touch) {
-            renderer.screenToWorld(k.x.toFloat(), k.y.toFloat(), tmp)
-            state.aimX = tmp.x - w.player.cx
-            state.aimY = tmp.y - w.player.cy
-            state.hasAim = true
-            // Mantener pulsado encadena el combo.
-            if (k.isButtonPressed(Input.Buttons.LEFT) || k.isKeyPressed(Input.Keys.J)) press(0)
-        } else {
-            state.hasAim = false
-            if (isPressed(0)) press(0)
+        when {
+            padActive -> aimWithStick(w, pad)
+            !touch -> {
+                renderer.screenToWorld(k.x.toFloat(), k.y.toFloat(), tmp)
+                state.aimX = tmp.x - w.player.cx
+                state.aimY = tmp.y - w.player.cy
+                state.hasAim = true
+                // Mantener pulsado encadena el combo.
+                if (k.isButtonPressed(Input.Buttons.LEFT) || k.isKeyPressed(Input.Keys.J)) press(0)
+            }
+            else -> {
+                state.hasAim = false
+                if (isPressed(0)) press(0)
+            }
         }
+    }
+
+    /**
+     * Stick derecho con auto-apuntado suave de 12° (§3). Sin stick derecho, el juego
+     * apunta solo al enemigo más cercano en la dirección de movimiento, igual que en táctil.
+     */
+    private fun aimWithStick(w: World, pad: Gamepad) {
+        val sl = len(pad.rx, pad.ry)
+        if (sl <= 0f) {
+            state.hasAim = false
+            return
+        }
+        var dx = pad.rx / sl
+        var dy = pad.ry / sl
+        val p = w.player
+        var bestCos = COS_12
+        for (e in w.enemies) {
+            if (!e.targetable) continue
+            val ex = e.x - p.cx
+            val ey = e.y - p.cy
+            val d = sqrt(ex * ex + ey * ey)
+            if (d < 1f || d > 220f) continue
+            val c = (ex * pad.rx + ey * pad.ry) / (d * sl)
+            if (c > bestCos) {
+                bestCos = c
+                dx = ex / d
+                dy = ey / d
+            }
+        }
+        state.aimX = dx
+        state.aimY = dy
+        state.hasAim = true
+    }
+
+    companion object {
+        private val COS_12 = cos(Math.toRadians(12.0)).toFloat()
     }
 }

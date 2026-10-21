@@ -38,16 +38,25 @@ F0 (prototipo de sensación) está completa: movimiento, Destello, Farol, Haz, l
 
 ## Controles
 
-| Acción   | PC                     | Android                        |
-|----------|------------------------|--------------------------------|
-| Mover    | WASD / flechas         | Joystick (mitad izquierda)     |
-| Apuntar  | Ratón                  | Auto-apuntado en el cono       |
-| Farol    | Clic izq. (mantener = combo) / J | Botón FAROL           |
-| Destello | Espacio / Shift        | Botón DESTELLO                 |
-| Haz      | Clic der. / K / Q      | Botón HAZ                      |
-| Usar / comprar | E / Enter        | Botón USAR (aparece cerca)     |
-| Debug    | F1 cajas y FPS · F2 luz on/off | —                      |
-| Con F1   | F3 carta y Luz llena · F4 ir al jefe · F5 exvoto · F6 150 de daño | — |
+| Acción   | PC                     | Android táctil                 | Mando (Bluetooth / USB)     |
+|----------|------------------------|--------------------------------|-----------------------------|
+| Mover    | WASD / flechas         | Joystick (mitad izquierda)     | Stick izquierdo o cruceta   |
+| Apuntar  | Ratón                  | Auto-apuntado en el cono       | Stick derecho (auto-apuntado suave de 12°) |
+| Farol    | Clic izq. (mantener = combo) / J | Botón FAROL          | RT / RB / X (mantener = combo) |
+| Destello | Espacio / Shift        | Botón DESTELLO                 | A                           |
+| Haz      | Clic der. / K / Q      | Botón HAZ                      | LT / LB / B                 |
+| Usar / comprar | E / Enter        | Botón USAR (aparece cerca)     | Y                           |
+| Pausa    | Esc / P                | Botón II o atrás               | Start / Select              |
+| Debug    | F1 cajas y FPS · F2 luz on/off | —                      | —                           |
+| Con F1   | F3 carta y Luz llena · F4 ir al jefe · F5 exvoto · F6 150 de daño | — | — |
+
+**Mando:** se conecta por Bluetooth en los ajustes del teléfono y el juego lo detecta solo.
+Al usarlo se ocultan los controles táctiles, y vuelven a aparecer al tocar la pantalla.
+El mando vibra al recibir un golpe.
+
+Si algún botón no responde (pasa con mandos genéricos), ve a **Pausa → Configurar mando**
+y pulsa el botón que quieras para cada acción. Los gatillos analógicos también sirven.
+La configuración queda guardada, y **Botones por defecto** la deshace.
 
 ## Estructura
 
