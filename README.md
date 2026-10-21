@@ -15,21 +15,26 @@ Cada push a `main` compila el juego en GitHub Actions y actualiza la release **d
 El APK siempre se firma con la misma keystore de desarrollo (`android/debug.keystore`),
 así que cada versión nueva se instala encima de la anterior sin perder nada.
 
-## Estado: F0 · Prototipo de sensación
+## Estado: F1 · Núcleo roguelike
 
-Lo que pide la hoja de ruta: que moverse y golpear se sienta bien, con cuadrados de colores.
+Una run completa del bioma 1, el Muelle Ahogado: 3 pisos y la Sirena de Brea.
 
-- Movimiento con aceleración (0,08 s) y frenado (0,06 s) a 96 px/s.
-- **Destello**: 56 px en 0,16 s, 0,12 s de invulnerabilidad y 0,55 s de recarga.
-- **Farol**: combo de 3 golpes con frame data 4/3/8. El 3.er golpe aplica Quemadura.
-- **Haz**: cuesta 8 de Luz, dura 2 s, hace 30 de daño por segundo y atraviesa enemigos.
-- **Luz** como vida: el radio de visión es 48 + 1,2·Luz. Los enemigos sueltan Luz, y con
-  menos de 25 de Luz sueltan un 50 % más.
-- Tres enemigos del Muelle definidos en `assets/data/enemies.json`:
-  Ahogado, Medusa-farol y Cangrejo-relicario.
-- Salas con oleadas según el presupuesto de §6. El piso sube cada 3 salas.
-- Luz por bandas con tramado Bayer 4×4 (`assets/shaders/final.frag`), compatible con GLES 2.
-- Hit-stop, temblor de cámara, búfer de entrada de 0,12 s y escalado entero 480×270.
+- **Pisos generados** con el algoritmo de §7 (rejilla 9×7). Incluyen tienda, tesoro, refugio,
+  salas élite, una sala secreta que se abre disparando el Haz a la pared agrietada, y la
+  escalera o el jefe en la sala más lejana.
+- **21 plantillas de Tiled** en `assets/rooms/`: 15 de combate, las salas especiales y la arena del jefe.
+- **Pozos de agua**: Isla cae con 0,1 s de coyote y pierde 10 de Luz. El Destello los cruza.
+- **15 exvotos** con conjuntos ×3 (Fuego, Sal, Marea, Hueso) y dos legendarios.
+- **Luz como moneda**: exvotos a 15/25/40/60 según rareza, Mecha a 30, mejora del Farol a 20
+  y carta del piso a 10. Comprar nunca te deja por debajo de 1 de Luz.
+- **Élites** con los afijos Salado, Brillante, Gemelo y Hambriento.
+- **La Sirena de Brea**, con 900 de vida y 3 fases:
+  1. Espiral de notas y abanicos dirigidos.
+  2. La brea apaga tu luz un 30 %.
+  3. Se sumerge y emerge bajo ti con un aviso de burbujas de 0,6 s.
+- Al vencerla ganas **5 Perlas**, que quedan guardadas para el Santuario de la F2.
+
+F0 (prototipo de sensación) está completa: movimiento, Destello, Farol, Haz, luz por bandas.
 
 ## Controles
 
@@ -40,7 +45,9 @@ Lo que pide la hoja de ruta: que moverse y golpear se sienta bien, con cuadrados
 | Farol    | Clic izq. (mantener = combo) / J | Botón FAROL           |
 | Destello | Espacio / Shift        | Botón DESTELLO                 |
 | Haz      | Clic der. / K / Q      | Botón HAZ                      |
+| Usar / comprar | E / Enter        | Botón USAR (aparece cerca)     |
 | Debug    | F1 cajas y FPS · F2 luz on/off | —                      |
+| Con F1   | F3 carta y Luz llena · F4 ir al jefe · F5 exvoto · F6 150 de daño | — |
 
 ## Estructura
 
@@ -52,7 +59,8 @@ core/src/main/kotlin/cl/xiombo/faro/
   render/Renderer.kt   escena → luz → shader final → HUD
   input/               teclado, ratón y táctil
   data/                Balance (números del documento), Pal (paletas), EnemyDef
-assets/                shaders, data
+assets/                shaders, data, rooms (Tiled)
+tools/                 salas.txt + gen_salas.py (plantillas → .tmx validados)
 lwjgl3/                lanzador de PC
 android/               lanzador de Android
 ```
@@ -67,6 +75,22 @@ del juego, empieza por ahí.
 ./gradlew android:assembleDebug   # APK (necesita Android SDK)
 ```
 
-## Siguiente fase: F1 · Núcleo roguelike
+## Salas en Tiled
 
-Generador de pisos 9×7, plantillas de Tiled, tienda, exvotos, la Luz como moneda y la Sirena de Brea.
+Abre cualquier `assets/rooms/*.tmx` con [Tiled](https://www.mapeditor.org/). Tiene dos capas:
+- **terreno:** muro y agua.
+- **marcadores:** aparición de enemigos y pedestal.
+
+Si añades una sala, inclúyela en `assets/rooms/index.json`. Otra opción es escribirla en
+`tools/salas.txt` y ejecutar `python3 tools/gen_salas.py`, que además comprueba que se pueda
+llegar a todas las puertas y marcadores.
+
+## Builds
+
+- `main` publica la release **dev**.
+- Las ramas de fase (`f1`, `f2`…) publican **preview-<rama>** para probar antes de fusionar.
+
+## Siguiente fase: F2 · Biomas 1 y 2
+
+Arte final del Muelle y la Catedral, 6 enemigos más, el Obispo Coral, el Santuario básico
+(donde se gastan las Perlas), y el Arpón y la Campana.

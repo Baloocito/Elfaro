@@ -175,7 +175,7 @@ class World(val seed: Long) {
 
         val firstVisit = !c.stocked
         stock(c, tpl)
-        val entry = if (moved == null) floatArrayOf(room.width / 2f, room.height / 2f - 24f) else room.entryPoint(moved.opposite)
+        val entry = if (moved == null) floatArrayOf(room.width / 2f, (room.rows / 2) * TILE - 2f) else room.entryPoint(moved.opposite)
         player.placeAt(entry[0], entry[1])
         targetX = player.cx; targetY = player.cy
 
