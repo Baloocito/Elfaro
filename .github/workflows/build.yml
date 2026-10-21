@@ -2,7 +2,7 @@ name: Build
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'f*']
   pull_request:
   workflow_dispatch:
 
@@ -53,15 +53,21 @@ jobs:
           name: faro-hundido-${{ github.sha }}
           path: dist/
 
-      # Release "dev" siempre apunta al último build: el link de descarga no cambia.
-      - name: Publicar release dev
+      # main → release "dev" (el link de descarga no cambia).
+      # Otras ramas → release "preview-<rama>" para probar antes de fusionar.
+      - name: Publicar release
         if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete dev --yes --cleanup-tag || true
-          gh release create dev dist/FaroHundido.apk dist/FaroHundido.jar \
+          if [ "$GITHUB_REF_NAME" = "main" ]; then
+            TAG=dev; TITLE="Build de desarrollo"
+          else
+            TAG="preview-${GITHUB_REF_NAME//\//-}"; TITLE="Vista previa: $GITHUB_REF_NAME"
+          fi
+          gh release delete "$TAG" --yes --cleanup-tag || true
+          gh release create "$TAG" dist/FaroHundido.apk dist/FaroHundido.jar \
             --prerelease \
             --target "$GITHUB_SHA" \
-            --title "Build de desarrollo" \
+            --title "$TITLE" \
             --notes "Commit ${GITHUB_SHA::7}: $(git log -1 --pretty=%s)"
