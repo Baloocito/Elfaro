@@ -1,0 +1,37 @@
+{
+  "combate": [
+    "combate_pilares.tmx",
+    "combate_canal.tmx",
+    "combate_poza.tmx",
+    "combate_almacen.tmx",
+    "combate_pasillos.tmx",
+    "combate_anillo.tmx",
+    "combate_manglar.tmx",
+    "combate_barcas.tmx",
+    "combate_redes.tmx",
+    "combate_embarcadero.tmx",
+    "combate_columnas.tmx",
+    "combate_lago.tmx",
+    "combate_escombros.tmx",
+    "combate_islas.tmx",
+    "combate_esquinas.tmx"
+  ],
+  "inicio": [
+    "inicio_faro.tmx"
+  ],
+  "tienda": [
+    "tienda_pescadora.tmx"
+  ],
+  "tesoro": [
+    "tesoro_cofre.tmx"
+  ],
+  "refugio": [
+    "refugio_farol.tmx"
+  ],
+  "secreta": [
+    "secreta_gruta.tmx"
+  ],
+  "jefe": [
+    "jefe_sirena.tmx"
+  ]
+}

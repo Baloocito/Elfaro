@@ -34,5 +34,17 @@ object Pal {
     val CANGREJO = c("9b7a52")
     val SHELL = c("d8cfb4")
 
+    val TIDE = c("2f7590")
+    val FOAM = c("73b59a")
+    val BREA = c("140d0a")
+    val RARE = c("6fb6e8")
+    val EPIC = c("c792ea")
+
+    // Afijos de élite
+    val SALADO = c("f4ecd8")
+    val BRILLANTE = c("ffe39a")
+    val GEMELO = c("c79ae0")
+    val HAMBRIENTO = c("b23a3a")
+
     val SHADOW = Color(0f, 0f, 0f, 0.35f)
 }
