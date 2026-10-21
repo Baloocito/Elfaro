@@ -309,6 +309,7 @@ class World(val seed: Long) {
             return
         }
 
+        if (inp.debugCmd != 0) debugCommand(inp.debugCmd)
         val s = statue
         if (s != null) { targetX = s.x; targetY = s.y } else { targetX = player.cx; targetY = player.cy }
 
@@ -715,6 +716,20 @@ class World(val seed: Long) {
             }
         }
         return r
+    }
+
+    /** F3: carta + Luz llena · F4: ir al jefe · F5: exvoto al azar · F6: 150 de daño a todo. */
+    private fun debugCommand(cmd: Int) {
+        when (cmd) {
+            3 -> { revealMap(); player.luz = player.luzMax }
+            4 -> {
+                if (floorNum != 3) startFloor(3)
+                val b = map.all.first { it.type == CellType.BOSS }
+                enterCell(b, null)
+            }
+            5 -> Exvotos.roll(rng, owned.map { it.id }.toSet())?.let { owned += it; recomputeStats(); showBanner(it.name.uppercase(), 1.5f) }
+            6 -> for (e in enemies) e.takeHit(this, 150f, e.x, e.y, HitKind.BLAST)
+        }
     }
 
     fun hitstop(frames: Int) { hitstopFrames = max(hitstopFrames, frames) }

@@ -19,6 +19,8 @@ class InputState {
     var hazBuf = 0f
     var useBuf = 0f
     var anyPressed = false
+    /** Comandos de depuración (F3–F6, solo con F1 activo). */
+    var debugCmd = 0
 
     fun consume(dt: Float) {
         attackBuf = max(0f, attackBuf - dt)
@@ -26,5 +28,6 @@ class InputState {
         hazBuf = max(0f, hazBuf - dt)
         useBuf = max(0f, useBuf - dt)
         anyPressed = false
+        debugCmd = 0
     }
 }
