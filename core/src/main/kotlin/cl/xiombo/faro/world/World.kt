@@ -116,6 +116,9 @@ class World(val seed: Long) {
         private set
     var fadeT = 0f
         private set
+    /** Cuenta los golpes recibidos (para la vibración del mando). */
+    var hurtCount = 0
+        private set
     var interactable: Pedestal? = null
         private set
     var targetX = 0f
@@ -673,6 +676,7 @@ class World(val seed: Long) {
         var total = amount
         if (src?.affix == Affix.HAMBRIENTO) total += 3f
         p.luz -= total
+        hurtCount++
         intact = false
         p.hurtIframes = Balance.HIT_IFRAMES
         val dx = p.cx - sx
@@ -690,6 +694,7 @@ class World(val seed: Long) {
 
     fun onPlayerFell() {
         player.luz -= Player.FALL_DAMAGE
+        hurtCount++
         player.hurtIframes = Balance.HIT_IFRAMES
         intact = false
         fx.floater("-${Player.FALL_DAMAGE.toInt()}", player.cx, player.cy + 14f, Pal.CORAL)

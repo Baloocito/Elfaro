@@ -3,7 +3,11 @@ package cl.xiombo.faro.render
 import cl.xiombo.faro.data.Balance
 import cl.xiombo.faro.data.Pal
 import cl.xiombo.faro.data.Tag
+import cl.xiombo.faro.input.Action
+import cl.xiombo.faro.input.Bindings
 import cl.xiombo.faro.input.Controls
+import cl.xiombo.faro.input.Gamepad
+import cl.xiombo.faro.screen.PauseMenu
 import cl.xiombo.faro.world.Affix
 import cl.xiombo.faro.world.Ahogado
 import cl.xiombo.faro.world.Body
@@ -141,6 +145,12 @@ class Renderer : Disposable {
         oy = (bh - ih * scale) / 2
     }
 
+    /** Pantalla → coordenadas internas 480×270 (para tocar el menú). */
+    fun screenToInternal(sx: Float, sy: Float, out: Vector2): Vector2 {
+        val bh = Gdx.graphics.backBufferHeight
+        return out.set((sx - ox) / scale, (bh - sy - oy) / scale)
+    }
+
     fun screenToWorld(sx: Float, sy: Float, out: Vector2): Vector2 {
         val bh = Gdx.graphics.backBufferHeight
         val ix = (sx - ox) / scale
@@ -165,7 +175,12 @@ class Renderer : Disposable {
 
     // ---------- fotograma ----------
 
-    fun render(w: World, alpha: Float, controls: Controls) {
+    private var menu: PauseMenu? = null
+    private var pad: Gamepad? = null
+
+    fun render(w: World, alpha: Float, controls: Controls, menu: PauseMenu, pad: Gamepad) {
+        this.menu = menu
+        this.pad = pad
         updateLayout()
         placeCamera(w, alpha)
         drawScene(w, alpha)
@@ -173,6 +188,78 @@ class Renderer : Disposable {
         composite()
         drawHud(w)
         drawScreenSpace(w, controls)
+        if (menu.open) drawMenu(menu, pad, controls)
+    }
+
+    /** Nombre del botón para una acción según el dispositivo con el que se juega. */
+    private fun keyLabel(c: Controls, a: Action): String = when {
+        c.padActive -> Bindings.label(pad?.controller, a)
+        c.touch -> a.label.uppercase()
+        else -> when (a) { Action.ATTACK -> "Clic"; Action.DASH -> "Espacio"; Action.HAZ -> "Clic der."; Action.USE -> "E" }
+    }
+
+    private fun anyKeyText(c: Controls, what: String) = when {
+        c.padActive -> "Pulsa ${Bindings.label(pad?.controller, Action.DASH)} para $what"
+        c.touch -> "Toca para $what"
+        else -> "Pulsa una tecla para $what"
+    }
+
+    private fun drawMenu(m: PauseMenu, pad: Gamepad, c: Controls) {
+        val bw = Gdx.graphics.backBufferWidth
+        val bh = Gdx.graphics.backBufferHeight
+        Gdx.gl.glViewport(ox, oy, iw * scale, ih * scale)
+        Gdx.gl.glEnable(GL20.GL_BLEND)
+        shapes.projectionMatrix = internalProj
+        shapes.begin(ShapeType.Filled)
+        col(Pal.OUTLINE, 0.82f)
+        shapes.rect(0f, 0f, iw.toFloat(), ih.toFloat())
+        val x0 = (iw - PauseMenu.ITEM_W) / 2f
+        if (m.remap < 0) {
+            PauseMenu.ITEMS.forEachIndexed { i, _ ->
+                val y = PauseMenu.ITEM_Y0 - i * PauseMenu.ITEM_STEP
+                col(if (i == m.sel) Pal.LAMP else Pal.NIGHT, if (i == m.sel) 0.9f else 0.8f)
+                shapes.rect(x0, y - PauseMenu.ITEM_H / 2f, PauseMenu.ITEM_W, PauseMenu.ITEM_H)
+            }
+        } else {
+            // Progreso de la reasignación
+            Action.entries.forEachIndexed { i, _ ->
+                col(if (i < m.remap) Pal.LAMP else if (i == m.remap) Pal.LAMP_HI else Pal.NIGHT)
+                shapes.rect(iw / 2f - 46f + i * 24f, 120f, 20f, 4f)
+            }
+        }
+        shapes.end()
+
+        Gdx.gl.glViewport(0, 0, bw, bh)
+        batch.projectionMatrix = screenProj
+        batch.begin()
+        text("PAUSA", iw / 2f, 222f, Pal.LAMP, align = 0)
+        if (m.remap < 0) {
+            PauseMenu.ITEMS.forEachIndexed { i, label ->
+                val y = PauseMenu.ITEM_Y0 - i * PauseMenu.ITEM_STEP + 5f
+                text(label, iw / 2f, y, if (i == m.sel) Pal.OUTLINE else Pal.CREAM, align = 0)
+            }
+            val ctl = pad.controller
+            val info = if (ctl == null) "Sin mando conectado" else "Mando: ${ctl.name.take(40)}"
+            text(info, iw / 2f, 68f, Pal.SHELL, align = 0)
+            if (ctl != null) {
+                val map = Action.entries.joinToString("   ") { "${it.label}: ${Bindings.label(ctl, it)}" }
+                text(map, iw / 2f, 54f, Pal.CREAM, align = 0)
+            }
+        } else {
+            val a = Action.entries[m.remap]
+            text("Pulsa el botón para", iw / 2f, 170f, Pal.CREAM, align = 0)
+            text(a.label.uppercase(), iw / 2f, 150f, Pal.LAMP_HI, align = 0)
+            text("Los gatillos también sirven  ·  Start para cancelar", iw / 2f, 100f, Pal.SHELL, align = 0)
+        }
+        if (m.note.isNotEmpty()) text(m.note, iw / 2f, 36f, Pal.FOAM, align = 0)
+        val hint = when {
+            c.padActive || pad.controller != null -> "Stick o cruceta para elegir  ·  A aceptar  ·  B volver"
+            c.touch -> "Toca una opción"
+            else -> "Flechas para elegir  ·  Enter aceptar  ·  Esc volver"
+        }
+        text(hint, iw / 2f, 18f, Pal.SHELL, align = 0)
+        batch.end()
+        font.color = Color.WHITE
     }
 
     private fun drawScene(w: World, a: Float) {
@@ -799,7 +886,7 @@ class Renderer : Disposable {
         val bh = Gdx.graphics.backBufferHeight
         Gdx.gl.glViewport(0, 0, bw, bh)
         screenProj.setToOrtho2D(0f, 0f, bw.toFloat(), bh.toFloat())
-        if (c.touch && w.mode == World.Mode.PLAYING) drawTouch(c)
+        if (c.showTouchUi && w.mode == World.Mode.PLAYING && menu?.open != true) drawTouch(c)
 
         batch.projectionMatrix = screenProj
         font.data.setScale(max(1, scale / 2).toFloat())
@@ -818,7 +905,7 @@ class Renderer : Disposable {
         }
         val it = w.interactable
         if (it != null && w.mode == World.Mode.PLAYING) {
-            val key = if (c.touch) "USAR" else "E"
+            val key = keyLabel(c, Action.USE)
             val price = when {
                 it.price > 0 -> "  ·  ${it.price} de Luz"
                 it.kind == PedKind.EXVOTO -> "  ·  gratis"
@@ -830,7 +917,7 @@ class Renderer : Disposable {
         when (w.mode) {
             World.Mode.DEAD -> if (w.modeT > 1.2f) {
                 text("Piso ${w.floorNum}  ·  ${w.kills} bajas  ·  ${w.owned.size} exvotos", iw / 2f, ih * 0.58f, Pal.CREAM, align = 0)
-                text(if (c.touch) "Toca para volver a bajar" else "Pulsa una tecla para volver a bajar", iw / 2f, ih * 0.46f, Pal.LAMP_HI, align = 0)
+                text(anyKeyText(c, "volver a bajar"), iw / 2f, ih * 0.46f, Pal.LAMP_HI, align = 0)
             }
             World.Mode.VICTORY -> {
                 val mm = (w.time / 60f).toInt()
@@ -839,11 +926,15 @@ class Renderer : Disposable {
                 text("Tiempo ${mm}:${ss.toString().padStart(2, '0')}  ·  ${w.kills} bajas  ·  ${w.owned.size} exvotos", iw / 2f, ih * 0.62f, Pal.CREAM, align = 0)
                 text("Perlas +${w.perlasRun}   (total ${w.perlasTotal})", iw / 2f, ih * 0.54f, Pal.SHELL, align = 0)
                 text("Fin de la F1. El Santuario y la Catedral llegan en la F2.", iw / 2f, ih * 0.42f, Pal.CREAM, align = 0)
-                if (w.modeT > 1.5f) text(if (c.touch) "Toca para una nueva run" else "Pulsa una tecla para una nueva run", iw / 2f, ih * 0.32f, Pal.LAMP_HI, align = 0)
+                if (w.modeT > 1.5f) text(anyKeyText(c, "una nueva run"), iw / 2f, ih * 0.32f, Pal.LAMP_HI, align = 0)
             }
             else -> {}
         }
-        if (c.touch && w.mode == World.Mode.PLAYING) {
+        if (c.showTouchUi && w.mode == World.Mode.PLAYING && menu?.open != true) {
+            val pb = c.pauseButton()
+            glyphs.setText(font, pb.label)
+            font.color = Pal.CREAM
+            font.draw(batch, pb.label, pb.x - glyphs.width / 2f, pb.y + glyphs.height / 2f)
             val btns = c.buttons()
             for (i in btns.indices) {
                 if (i == 3 && !c.useVisible) continue
@@ -900,6 +991,9 @@ class Renderer : Disposable {
             col(base, if (c.isPressed(i)) 0.55f else 0.22f)
             shapes.circle(b.x, b.y, b.r, 40)
         }
+        val pb = c.pauseButton()
+        col(Pal.CREAM, 0.18f)
+        shapes.circle(pb.x, pb.y, pb.r, 30)
         val jr = c.joyRadius
         if (c.joyPtr != -1) {
             col(Pal.CREAM, 0.12f)
