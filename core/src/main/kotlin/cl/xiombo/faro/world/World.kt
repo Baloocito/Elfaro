@@ -1038,7 +1038,7 @@ class World private constructor(val seed: Long, val kind: Kind) {
         )
     }
 
-    /** F3: carta + Luz llena · F4: ir al jefe · F5: exvoto (en el Santuario: +50 Perlas y todas las armas) · F6: 150 de daño · F8: Isla recibe 40. */
+    /** F3: carta + Luz llena · F4: ir al jefe · F5: exvoto (en el Santuario: +50 Perlas y todas las armas) · F6: 150 de daño · F8: Isla recibe 40 · F9: siguiente sala grande o antesala. */
     private fun debugCommand(cmd: Int) {
         when (cmd) {
             3 -> { if (!inSanctuary) { revealMap(); player.luz = player.luzMax } }
@@ -1057,6 +1057,12 @@ class World private constructor(val seed: Long, val kind: Kind) {
                 Exvotos.roll(rng, owned.map { it.id }.toSet())?.let { owned += it; recomputeStats(); showBanner(it.name.uppercase(), 1.5f) }
             }
             6 -> for (e in enemies) e.takeHit(this, 150f, e.x, e.y, HitKind.BLAST)
+            9 -> if (!inSanctuary) {
+                // Salta a la siguiente sala grande o antesala del piso (para probarlas).
+                val list = map.all.filter { (it.partner != null && it.anchor) || it.type == CellType.ANTESALA }
+                if (list.isEmpty()) showBanner("DEBUG: NO HAY SALAS GRANDES EN ESTE PISO", 1.5f)
+                else enterCell(list[(list.indexOf(cell) + 1) % list.size], null)
+            }
             8 -> if (!inSanctuary) hurtPlayer(40f, player.cx + 10f, player.cy, enemies.firstOrNull(), "Depuración (F8)")
         }
     }
