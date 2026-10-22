@@ -18,7 +18,8 @@ class VirtualController : Controller {
         Input.Keys.NUM_5, Input.Keys.NUM_6, Input.Keys.NUM_7, Input.Keys.NUM_8,
         Input.Keys.NUM_9, Input.Keys.NUM_0, Input.Keys.TAB,
     )
-    private val map = ControllerMapping(
+    /** El constructor de ControllerMapping es protegido: se crea con una subclase. */
+    private class VirtualMapping : ControllerMapping(
         0, 1, 2, 3,          // ejes: izq X/Y, der X/Y
         0, 1, 2, 3,          // A B X Y
         10, 11,              // Select, Start
@@ -26,6 +27,8 @@ class VirtualController : Controller {
         8, 9,                // L3, R3
         12, 13, 14, 15,      // cruceta
     )
+
+    private val map: ControllerMapping = VirtualMapping()
 
     override fun getButton(buttonCode: Int): Boolean =
         buttonCode in keys.indices && Gdx.input.isKeyPressed(keys[buttonCode])
