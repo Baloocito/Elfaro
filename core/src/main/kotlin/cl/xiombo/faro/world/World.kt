@@ -284,6 +284,7 @@ class World private constructor(val seed: Long, val kind: Kind) {
             for (c in map.all) if (c.type != CellType.COMBAT && c.type != CellType.SECRET) { c.known = true; c.iconShown = true }
         }
         enterCell(map.start, null)
+        memory = null
         val b = biome
         if (n == b.firstFloor) {
             chapter = Story.chapter(b)

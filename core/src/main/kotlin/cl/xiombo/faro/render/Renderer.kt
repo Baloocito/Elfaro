@@ -1372,14 +1372,15 @@ class Renderer : Disposable {
         if (w.chapter != null && w.chapterT > 0f) {
             val k = min(1f, w.chapterT / 0.8f) * min(1f, (World.CHAPTER_TIME - w.chapterT) / 0.6f)
             col(Pal.OUTLINE, 0.55f * k)
-            shapes.rect(0f, ih * 0.52f, iw.toFloat(), ih * 0.2f)
+            shapes.rect(0f, ih * 0.6f, iw.toFloat(), ih * 0.2f)
         }
         if (w.memory != null && w.memoryT > 0f && w.mode == World.Mode.PLAYING) {
             val k = min(1f, w.memoryT / 1f) * min(1f, (World.MEMORY_TIME - w.memoryT) / 0.8f)
+            // Arriba, para no tapar a Isla ni la recompensa del jefe.
             col(Pal.NIGHT, 0.88f * k)
-            shapes.rect(40f, 56f, iw - 80f, 66f)
+            shapes.rect(40f, 138f, iw - 80f, 66f)
             col(Pal.LAMP_DIM, k)
-            shapes.rect(40f, 121f, iw - 80f, 1f)
+            shapes.rect(40f, 203f, iw - 80f, 1f)
         }
 
         if (w.inSanctuary) {
@@ -1541,16 +1542,16 @@ class Renderer : Disposable {
         w.chapter?.let { (title, line) ->
             if (w.chapterT > 0f) {
                 val k = min(1f, w.chapterT / 0.8f) * min(1f, (World.CHAPTER_TIME - w.chapterT) / 0.6f)
-                text(title, iw / 2f, ih * 0.66f, Pal.LAMP, alpha = k, align = 0)
-                text(line, iw / 2f, ih * 0.58f, Pal.CREAM, alpha = k, align = 0, wrap = iw * 0.8f)
+                text(title, iw / 2f, ih * 0.74f, Pal.LAMP, alpha = k, align = 0)
+                text(line, iw / 2f, ih * 0.66f, Pal.CREAM, alpha = k, align = 0, wrap = iw * 0.8f)
             }
         }
         // Recuerdo del jefe (solo la primera vez que cae).
         w.memory?.let { m ->
             if (w.memoryT > 0f && w.mode == World.Mode.PLAYING) {
                 val k = min(1f, w.memoryT / 1f) * min(1f, (World.MEMORY_TIME - w.memoryT) / 0.8f)
-                text(m.title, iw / 2f, 112f, Pal.LAMP_HI, alpha = k, align = 0)
-                text(m.text, iw / 2f, 98f, Pal.CREAM, alpha = k, align = 0, wrap = iw * 0.78f)
+                text(m.title, iw / 2f, 194f, Pal.LAMP_HI, alpha = k, align = 0)
+                text(m.text, iw / 2f, 180f, Pal.CREAM, alpha = k, align = 0, wrap = iw * 0.78f)
             }
         }
         val it = w.interactable
