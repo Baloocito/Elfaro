@@ -42,21 +42,27 @@ F0 (prototipo de sensación) está completa: movimiento, Destello, Farol, Haz, l
 |----------|------------------------|--------------------------------|-----------------------------|
 | Mover    | WASD / flechas         | Joystick (mitad izquierda)     | Stick izquierdo o cruceta   |
 | Apuntar  | Ratón                  | Auto-apuntado en el cono       | Stick derecho (auto-apuntado suave de 12°) |
-| Farol    | Clic izq. (mantener = combo) / J | Botón FAROL          | RT / RB / X (mantener = combo) |
-| Destello | Espacio / Shift        | Botón DESTELLO                 | A                           |
-| Haz      | Clic der. / K / Q      | Botón HAZ                      | LT / LB / B                 |
+| Farol    | Clic izq. (mantener = combo) / J | Botón FAROL          | RT / X (mantener = combo)   |
+| Destello | Espacio / Shift        | Botón DESTELLO                 | A / RB                      |
+| Haz      | Clic der. / K / Q      | Botón HAZ                      | LT / B                      |
 | Usar / comprar | E / Enter        | Botón USAR (aparece cerca)     | Y                           |
 | Pausa    | Esc / P                | Botón II o atrás               | Start / Select              |
 | Debug    | F1 cajas y FPS · F2 luz on/off | —                      | —                           |
-| Con F1   | F3 carta y Luz llena · F4 ir al jefe · F5 exvoto · F6 150 de daño | — | — |
+| Con F1   | F3 carta y Luz llena · F4 ir al jefe · F5 exvoto · F6 150 de daño · F7 mando virtual (teclas 1–0) | — | — |
 
 **Mando:** se conecta por Bluetooth en los ajustes del teléfono y el juego lo detecta solo.
 Al usarlo se ocultan los controles táctiles, y vuelven a aparecer al tocar la pantalla.
 El mando vibra al recibir un golpe.
 
-Si algún botón no responde (pasa con mandos genéricos), ve a **Pausa → Configurar mando**
-y pulsa el botón que quieras para cada acción. Los gatillos analógicos también sirven.
-La configuración queda guardada, y **Botones por defecto** la deshace.
+**Configurar mando** (en la pausa) muestra el mando dibujado, con cada botón del color de su
+acción y encendido mientras lo pulsas, y una tabla de acciones con dos huecos cada una:
+- Elige un hueco y pulsa **A**, luego el botón que quieras. Los gatillos analógicos también sirven.
+- **X** quita un botón, **Y** vuelve a la distribución por defecto y **B** guarda y sale.
+- Reglas: máximo 2 botones por acción, y un botón solo puede tener una acción. Si asignas uno
+  que ya está en uso, los huecos se intercambian. Ninguna acción puede quedarse sin botón.
+- Start, Select y la cruceta están reservados (pausa y movimiento), así nunca te quedas sin ellos.
+
+Por defecto: Farol RT + X · Destello A + RB · Haz LT + B · Usar Y (LB libre).
 
 ## Estructura
 

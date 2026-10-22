@@ -37,6 +37,14 @@ class Gamepad {
         private set
     var navDown = false
         private set
+    var navLeft = false
+        private set
+    var navRight = false
+        private set
+    var xPressed = false
+        private set
+    var yPressed = false
+        private set
     var anyInput = false
         private set
 
@@ -44,15 +52,21 @@ class Gamepad {
     private var prevA = false
     private var prevB = false
     private var navLatch = 0
+    private var navLatchX = 0
+    private var prevX = false
+    private var prevY = false
 
     // Captura para reasignar botones
     private val capturedButtons = HashSet<Int>()
     private val latchedAxes = HashSet<Int>()
     private var axisBase = FloatArray(0)
 
+    /** Mando virtual de depuración (F7 con F1 activo); solo se usa si no hay uno real. */
+    var virtual: Controller? = null
+
     private fun current(): Controller? = runCatching {
         Controllers.getCurrent() ?: Controllers.getControllers().firstOrNull()
-    }.getOrNull()
+    }.getOrNull() ?: virtual
 
     private fun axis(c: Controller, i: Int) = if (i < 0 || i >= c.axisCount) 0f else c.getAxis(i)
     private fun button(c: Controller, i: Int) = i >= 0 && c.getButton(i)
@@ -61,6 +75,7 @@ class Gamepad {
         val c = current()
         controller = c
         startPressed = false; confirm = false; back = false; navUp = false; navDown = false; anyInput = false
+        navLeft = false; navRight = false; xPressed = false; yPressed = false
         pressed.fill(false)
         if (c == null || !c.isConnected) {
             lx = 0f; ly = 0f; rx = 0f; ry = 0f
@@ -94,6 +109,17 @@ class Gamepad {
         back = b && !prevB
         prevB = b
 
+        val xb = button(c, m.buttonX)
+        xPressed = xb && !prevX
+        prevX = xb
+        val yb = button(c, m.buttonY)
+        yPressed = yb && !prevY
+        prevY = yb
+        when {
+            lx > 0.6f && navLatchX != 1 -> { navRight = true; navLatchX = 1 }
+            lx < -0.6f && navLatchX != -1 -> { navLeft = true; navLatchX = -1 }
+            abs(lx) < 0.3f -> navLatchX = 0
+        }
         when {
             ly > 0.6f && navLatch != 1 -> { navUp = true; navLatch = 1 }
             ly < -0.6f && navLatch != -1 -> { navDown = true; navLatch = -1 }
@@ -129,15 +155,22 @@ class Gamepad {
         axisBase = FloatArray(c.axisCount) { c.getAxis(it) }
     }
 
-    /** Devuelve el siguiente botón o eje pulsado ("b12", "a4+"), o null si no hay ninguno nuevo. */
+    /**
+     * Devuelve el siguiente botón o eje pulsado ("b12", "a4+"), o null si no hay ninguno nuevo.
+     * Si se pulsa un botón reservado devuelve un aviso que empieza por "!".
+     */
     fun capture(): String? {
         val c = controller ?: return null
         val m = c.mapping
+        val dpad = setOf(m.buttonDpadUp, m.buttonDpadDown, m.buttonDpadLeft, m.buttonDpadRight)
         for (i in c.minButtonIndex..c.maxButtonIndex) {
             val down = c.getButton(i)
             if (!down) { capturedButtons -= i; continue }
-            if (i in capturedButtons || i == m.buttonStart || i == m.buttonBack) continue
+            if (i in capturedButtons) continue
             capturedButtons += i
+            if (i == m.buttonStart) continue   // Start cancela (lo gestiona el menú)
+            if (i == m.buttonBack) return "!Select está reservado para la pausa"
+            if (i in dpad) return "!La cruceta está reservada para mover a Isla"
             return "b$i"
         }
         val sticks = setOf(m.axisLeftX, m.axisLeftY, m.axisRightX, m.axisRightY)

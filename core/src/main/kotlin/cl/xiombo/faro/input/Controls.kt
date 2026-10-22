@@ -28,8 +28,17 @@ class Controls(private val renderer: Renderer) : InputAdapter() {
         var down = false
         var confirm = false
         var back = false
-        var tapItem = -1
-        fun clear() { pause = false; up = false; down = false; confirm = false; back = false; tapItem = -1 }
+        var left = false
+        var right = false
+        var clear = false
+        var restore = false
+        var hasTap = false
+        var tapX = 0f
+        var tapY = 0f
+        fun clear() {
+            pause = false; up = false; down = false; confirm = false; back = false
+            left = false; right = false; clear = false; restore = false; hasTap = false
+        }
     }
 
     val state = InputState()
@@ -39,6 +48,8 @@ class Controls(private val renderer: Renderer) : InputAdapter() {
     /** true mientras se juega con mando: oculta los controles táctiles e ignora el ratón para apuntar. */
     var padActive = false
     var menuOpen = false
+    /** Pedido de activar/desactivar el mando virtual (lo atiende RunScreen). */
+    var toggleVirtualPad = false
 
     var joyPtr = -1
         private set
@@ -91,6 +102,10 @@ class Controls(private val renderer: Renderer) : InputAdapter() {
                 Input.Keys.UP, Input.Keys.W -> menuInput.up = true
                 Input.Keys.DOWN, Input.Keys.S -> menuInput.down = true
                 Input.Keys.ENTER, Input.Keys.SPACE, Input.Keys.E -> menuInput.confirm = true
+                Input.Keys.LEFT, Input.Keys.A -> menuInput.left = true
+                Input.Keys.RIGHT, Input.Keys.D -> menuInput.right = true
+                Input.Keys.FORWARD_DEL, Input.Keys.DEL, Input.Keys.X -> menuInput.clear = true
+                Input.Keys.R -> menuInput.restore = true
                 Input.Keys.ESCAPE, Input.Keys.BACK, Input.Keys.P -> menuInput.back = true
             }
             return true
@@ -105,6 +120,7 @@ class Controls(private val renderer: Renderer) : InputAdapter() {
             Input.Keys.ESCAPE, Input.Keys.P, Input.Keys.BACK -> menuInput.pause = true
             Input.Keys.F1 -> renderer.debug = !renderer.debug
             Input.Keys.F2 -> renderer.lighting = !renderer.lighting
+            Input.Keys.F7 -> if (renderer.debug) toggleVirtualPad = true
             Input.Keys.F3, Input.Keys.F4, Input.Keys.F5, Input.Keys.F6 ->
                 if (renderer.debug) state.debugCmd = keycode - Input.Keys.F3 + 3
         }
@@ -114,7 +130,9 @@ class Controls(private val renderer: Renderer) : InputAdapter() {
     override fun touchDown(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean {
         if (menuOpen) {
             renderer.screenToInternal(screenX.toFloat(), screenY.toFloat(), tmp)
-            menuInput.tapItem = PauseMenu.itemAt(tmp.x, tmp.y)
+            menuInput.hasTap = true
+            menuInput.tapX = tmp.x
+            menuInput.tapY = tmp.y
             return true
         }
         state.anyPressed = true
