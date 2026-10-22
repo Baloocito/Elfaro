@@ -21,6 +21,10 @@ enum class CellType(val label: String) {
     CAPILLA("Capilla"),
     /** Celda con un rescatable (Amparo en el Muelle). Sala custodiada: hay que despejarla para abrir. */
     CELDA("Celda"),
+    /** Archivo: Sala de lectura (botella garantizada y reto sin Haz). Es de combate. */
+    LECTURA("Sala de lectura"),
+    /** Raíz: Corazón de piedra (vacía si no lo tocas; si lo golpeas, oleada élite). */
+    CORAZON("Corazón de piedra"),
     SANCTUARY("Santuario"),
 }
 
@@ -43,7 +47,7 @@ class Cell(val gx: Int, val gy: Int, var type: CellType) {
     /** La Cartógrafa (meta) deja ver el tipo de las salas especiales desde el inicio del piso. */
     var iconShown = false
 
-    val isCombat get() = type == CellType.COMBAT || type == CellType.ELITE || type == CellType.STAIRS || type == CellType.BOSS || type == CellType.CELDA
+    val isCombat get() = type == CellType.COMBAT || type == CellType.ELITE || type == CellType.STAIRS || type == CellType.BOSS || type == CellType.CELDA || type == CellType.LECTURA
 }
 
 class FloorMap(val cells: Array<Array<Cell?>>, val start: Cell) {
@@ -192,7 +196,13 @@ object FloorGen {
         others[0].type = CellType.TREASURE
         others[1].type = CellType.SHOP
         // Catedral: la Capilla de la ofrenda ocupa otro callejón sin salida si lo hay.
-        if (Biome.of(floor) == Biome.CATEDRAL && others.size >= 3) others[2].type = CellType.CAPILLA
+        // Archivo: Sala de lectura. Raíz: Corazón de piedra.
+        if (others.size >= 3) when (Biome.of(floor)) {
+            Biome.CATEDRAL -> others[2].type = CellType.CAPILLA
+            Biome.ARCHIVO -> others[2].type = CellType.LECTURA
+            Biome.RAIZ -> others[2].type = CellType.CORAZON
+            else -> {}
+        }
 
         // Refugio a media distancia.
         val half = exit.dist / 2f

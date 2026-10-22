@@ -30,6 +30,10 @@ enum class Affix(val label: String, val color: Color) {
     HAMBRIENTO("Hambriento", Pal.HAMBRIENTO),
     /** Catedral: un escudo absorbe el primer golpe cada 4 s (cualquier golpe lo rompe). */
     BENDECIDO("Bendecido", Pal.BENDECIDO),
+    /** Archivo: invisible fuera de tu luz (como la Tinta); su barra de vida sí se ve. La Campana lo revela 3 s. */
+    TACHADO("Tachado", Pal.TACHADO),
+    /** Raíz: +10 % de tamaño y de daño por cada 20 de tu Luz actual. */
+    HAMBRE("Hambre de luz", Pal.HUNGER),
 }
 
 fun createEnemy(id: String, x: Float, y: Float, floor: Int, affix: Affix? = null): Enemy {
@@ -44,6 +48,16 @@ fun createEnemy(id: String, x: Float, y: Float, floor: Int, affix: Affix? = null
         "vela" -> Vela(def, x, y, floor, affix)
         "cofrade" -> Cofrade(def, x, y, floor, affix)
         "obispo" -> Obispo(def, x, y)
+        "tinta" -> Tinta(def, x, y, floor, affix)
+        "bibliotecario" -> Bibliotecario(def, x, y, floor, affix)
+        "polilla" -> Polilla(def, x, y, floor, affix)
+        "copista" -> Copista(def, x, y, floor, affix)
+        "cartografo" -> Cartografo(def, x, y)
+        "anguila" -> Anguila(def, x, y, floor, affix)
+        "hijo" -> HijoDelFaro(def, x, y, floor, affix)
+        "vidriero" -> Vidriero(def, x, y, floor, affix)
+        "ojo" -> OjoFosa(def, x, y, floor, affix)
+        "lampara" -> LamparaMadre(def, x, y)
         else -> error("Enemigo desconocido: $id")
     }
 }
@@ -103,8 +117,18 @@ abstract class Enemy(val def: EnemyDef, x: Float, y: Float, val floor: Int, val 
 
     val radius get() = max(hw, hh)
     val slowed get() = slowT > 0f
-    val spd get() = if (slowed) speed * slowMul else speed
-    open val targetable get() = !killed
+    /** Multiplicador del latido de la Raíz (lo pone World cada tick). */
+    var boost = 1f
+    val spd get() = (if (slowed) speed * slowMul else speed) * boost
+
+    /** Solo existe dentro de tu luz (Tinta, élites Tachados): no se ve ni se golpea fuera de ella. */
+    open val needsLight: Boolean get() = affix == Affix.TACHADO
+    /** Dentro de la luz de Isla este tick (lo pone World). */
+    var inLight = true
+    /** La Campana revela a los que solo existen en la luz durante 3 s. */
+    var revealT = 0f
+    val hidden get() = needsLight && !inLight && revealT <= 0f && !killed
+    open val targetable get() = !killed && !hidden
     open val lightRadius: Float
         get() = when {
             affix == Affix.BRILLANTE && !killed -> 40f
@@ -118,6 +142,7 @@ abstract class Enemy(val def: EnemyDef, x: Float, y: Float, val floor: Int, val 
         slowT -= dt
         stunImmuneT -= dt
         shieldCd -= dt
+        revealT -= dt
         if (stunT > 0f) {
             stunT -= dt
             if (stunT <= 0f) stunImmuneT = 2f

@@ -13,6 +13,7 @@ class RoomTemplate(
     val terrain: IntArray,
     val spawns: List<IntArray>,     // [tx, ty]
     val pedestals: List<IntArray>,  // [tx, ty]
+    val eyes: List<IntArray> = emptyList(),  // Ojos de la fosa (Raíz)
 ) {
     fun terrainAt(tx: Int, ty: Int) = terrain[ty * cols + tx]
 }
@@ -26,6 +27,11 @@ object RoomTemplates {
     const val T_WATER = 2
     const val T_GLASS = 5
     const val T_CANDLE = 6
+    const val T_SHELF = 7
+    const val T_RAIL = 8
+    const val T_ATRIL = 9
+    const val T_MOLTEN = 10
+    const val M_EYE = 5
     const val M_SPAWN = 3
     const val M_PEDESTAL = 4
 
@@ -79,12 +85,14 @@ object RoomTemplates {
         }
         val spawns = ArrayList<IntArray>()
         val pedestals = ArrayList<IntArray>()
+        val eyes = ArrayList<IntArray>()
         for (y in 0 until rows) for (x in 0 until cols) {
             when (marks[y * cols + x]) {
                 M_SPAWN -> spawns += intArrayOf(x, y)
                 M_PEDESTAL -> pedestals += intArrayOf(x, y)
+                M_EYE -> eyes += intArrayOf(x, y)
             }
         }
-        return RoomTemplate(name, kind, cols, rows, terrain, spawns, pedestals)
+        return RoomTemplate(name, kind, cols, rows, terrain, spawns, pedestals, eyes)
     }
 }

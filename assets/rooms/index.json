@@ -72,5 +72,51 @@
   ],
   "celda": [
     "celda_guardia.tmx"
+  ],
+  "arc_combate": [
+    "arc_combate_estantes.tmx",
+    "arc_combate_pasillos.tmx",
+    "arc_combate_atriles.tmx",
+    "arc_combate_lectores.tmx",
+    "arc_combate_laberinto.tmx",
+    "arc_combate_cruce.tmx",
+    "arc_combate_tinta.tmx",
+    "arc_combate_mesas.tmx",
+    "arc_combate_central.tmx",
+    "arc_combate_indices.tmx",
+    "arc_combate_escaleras.tmx",
+    "arc_combate_legajos.tmx",
+    "arc_combate_cartas.tmx",
+    "arc_combate_sotano.tmx",
+    "arc_combate_rotonda.tmx"
+  ],
+  "lectura": [
+    "lectura_atril.tmx"
+  ],
+  "arc_jefe": [
+    "arc_jefe_cartografo.tmx"
+  ],
+  "raz_combate": [
+    "raz_combate_fundicion.tmx",
+    "raz_combate_rios.tmx",
+    "raz_combate_charcos.tmx",
+    "raz_combate_crisol.tmx",
+    "raz_combate_venas.tmx",
+    "raz_combate_mirada.tmx",
+    "raz_combate_ojos.tmx",
+    "raz_combate_galeria.tmx",
+    "raz_combate_pozo_ojos.tmx",
+    "raz_combate_raices.tmx",
+    "raz_combate_latido.tmx",
+    "raz_combate_nudo.tmx",
+    "raz_combate_camaras.tmx",
+    "raz_combate_grieta.tmx",
+    "raz_combate_fosa.tmx"
+  ],
+  "corazon": [
+    "corazon_piedra.tmx"
+  ],
+  "raz_jefe": [
+    "raz_jefe_lampara.tmx"
   ]
 }

@@ -40,8 +40,12 @@ class PauseMenu {
         const val ITEM_W = 220f
         const val ITEM_H = 17f
 
+        /** Separación entre opciones: más juntas si hay muchas. */
+        fun step(n: Int) = if (n > 6) 15f else ITEM_STEP
+        fun itemH(n: Int) = if (n > 6) 13f else ITEM_H
+
         /** Y de la opción i cuando hay n (centradas un poco por encima de la mitad). */
-        fun itemY(i: Int, n: Int) = 135f + n * 11f - i * ITEM_STEP
+        fun itemY(i: Int, n: Int) = 128f + (n - 1) * step(n) / 2f - i * step(n)
 
         // Pantalla de configuración
         const val ROW_Y0 = 184f
@@ -62,7 +66,7 @@ class PauseMenu {
             if (ix < x0 || ix > x0 + ITEM_W) return -1
             for (i in 0 until n) {
                 val y = itemY(i, n)
-                if (iy >= y - ITEM_H / 2f && iy <= y + ITEM_H / 2f) return i
+                if (iy >= y - itemH(n) / 2f && iy <= y + itemH(n) / 2f) return i
             }
             return -1
         }
@@ -163,6 +167,10 @@ class PauseMenu {
                 Item("Jefe: La Sirena de Brea") { finish(Request.Test(3, toBoss = true)) },
                 Item("Catedral Sumergida  ·  piso 4") { finish(Request.Test(4)) },
                 Item("Jefe: El Obispo Coral") { finish(Request.Test(6, toBoss = true)) },
+                Item("Archivo de los Náufragos  ·  piso 7") { finish(Request.Test(7)) },
+                Item("Jefe: El Cartógrafo") { finish(Request.Test(9, toBoss = true)) },
+                Item("Raíz del Faro  ·  piso 10") { finish(Request.Test(10)) },
+                Item("Jefe: La Lámpara Madre") { finish(Request.Test(12, toBoss = true)) },
                 Item("La celda de Amparo") { finish(Request.Test(1, toCell = true)) },
                 Item("Volver") { setPage(Page.TITLE) },
             )

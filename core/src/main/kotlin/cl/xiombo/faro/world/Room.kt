@@ -46,7 +46,28 @@ class Room(val template: RoomTemplate, val doors: Set<DoorSpec>, val crack: Door
         const val CANDLE = 7
         /** Coral: muro temporal (al morir un Cofrade) o el borde que crece en la arena del Obispo. */
         const val CORAL = 8
+        /** Archivo: estantería sobre rieles (bloquea y se desliza). */
+        const val SHELF = 9
+        /** Archivo: atril con lámpara verde (bloquea; luz fija de 48 px). */
+        const val ATRIL = 10
+        /** Raíz: vidrio fundido (se pisa; quema 4 de Luz por segundo). */
+        const val MOLTEN = 11
         const val GLASS_BREAK_TIME = 1.2f
+    }
+
+    /**
+     * Grupo de estanterías: se desliza [steps] tiles en (dx, dy) hacia sus rieles y luego vuelve.
+     * [offset] = tiles desplazados ahora (0 = posición inicial).
+     */
+    class ShelfGroup(val tiles: MutableList<IntArray>, val dx: Int, val dy: Int) {
+        val steps = 2
+        var offset = 0
+        /** Aviso: los rieles brillan (s que faltan para moverse). */
+        var warnT = 0f
+        /** Pasos que faltan en el movimiento actual y su sentido (+1 hacia los rieles, -1 de vuelta). */
+        var pending = 0
+        var sign = 1
+        var stepT = 0f
     }
 
     val cols = template.cols
@@ -65,6 +86,11 @@ class Room(val template: RoomTemplate, val doors: Set<DoorSpec>, val crack: Door
     /** Coral temporal: segundos hasta desaparecer (< 0 = permanente o sin coral). */
     private val coralT = FloatArray(cols * rows) { -1f }
     private val coralUnder = IntArray(cols * rows)
+    /** Tiles de riel (Archivo): se dibujan y brillan antes de que se mueva una estantería. */
+    private val rail = BooleanArray(cols * rows)
+    val shelves = ArrayList<ShelfGroup>()
+    var hasMolten = false
+        private set
     var doorsOpen = true
     /** Hay vitrales en la sala (para no recorrer la rejilla si no hace falta). */
     var hasGlass = false
@@ -82,9 +108,14 @@ class Room(val template: RoomTemplate, val doors: Set<DoorSpec>, val crack: Door
                 RoomTemplates.T_WATER -> WATER
                 RoomTemplates.T_GLASS -> GLASS.also { hasGlass = true }
                 RoomTemplates.T_CANDLE -> CANDLE
+                RoomTemplates.T_SHELF -> SHELF.also { rail[i] = true }
+                RoomTemplates.T_RAIL -> FLOOR.also { rail[i] = true }
+                RoomTemplates.T_ATRIL -> ATRIL
+                RoomTemplates.T_MOLTEN -> MOLTEN.also { hasMolten = true }
                 else -> FLOOR
             }
         }
+        buildShelves()
         for (d in doors) carve(d, DOOR)
         if (crack != null) carve(crack, CRACK)
     }
@@ -166,21 +197,92 @@ class Room(val template: RoomTemplate, val doors: Set<DoorSpec>, val crack: Door
     }
 
     /** Pone coral en un tile. [seconds] < 0 = para siempre. Solo sobre suelo o vitral. */
-    fun putCoral(tx: Int, ty: Int, seconds: Float): Boolean {
+    fun putCoral(tx: Int, ty: Int, seconds: Float): Boolean = putTemp(tx, ty, CORAL, seconds)
+
+    /** Tile temporal (coral, vidrio fundido del Vidriero). Al acabar vuelve a lo que había debajo. */
+    fun putTemp(tx: Int, ty: Int, type: Int, seconds: Float): Boolean {
         if (tx !in 0 until cols || ty !in 0 until rows) return false
         val i = ty * cols + tx
         val t = tiles[i]
-        if (t != FLOOR && t != GLASS && t != HOLE) return false
-        coralUnder[i] = if (t == HOLE) HOLE else FLOOR
-        tiles[i] = CORAL
+        if (t != FLOOR && t != GLASS && t != HOLE && !(t == MOLTEN && type == MOLTEN && coralT[i] >= 0f)) return false
+        if (t != MOLTEN) coralUnder[i] = if (t == HOLE) HOLE else FLOOR
+        tiles[i] = type
         coralT[i] = seconds
         crackT[i] = -1f
+        if (type == MOLTEN) hasMolten = true
         return true
+    }
+
+    /** Vuelve sólido un tile (la base de la Lámpara Madre). */
+    fun block(tx: Int, ty: Int) = set(tx, ty, WALL)
+
+    fun isRail(tx: Int, ty: Int) = tx in 0 until cols && ty in 0 until rows && rail[ty * cols + tx]
+    fun isMoltenAt(x: Float, y: Float) = tileAt(floor(x / TILE).toInt(), floor(y / TILE).toInt()) == MOLTEN
+
+    /** Tiles de un tipo (atriles, vidrio fundido…). */
+    fun tilesOf(type: Int): List<IntArray> {
+        val out = ArrayList<IntArray>()
+        for (i in tiles.indices) if (tiles[i] == type) out += intArrayOf(i % cols, i / cols)
+        return out
+    }
+
+    /**
+     * Agrupa las estanterías conectadas y decide hacia dónde se deslizan: hacia el lado donde
+     * tienen rieles libres (primero en horizontal, luego en vertical).
+     */
+    private fun buildShelves() {
+        val seen = BooleanArray(tiles.size)
+        for (i in tiles.indices) {
+            if (tiles[i] != SHELF || seen[i]) continue
+            val group = ArrayList<IntArray>()
+            val stack = ArrayDeque<Int>()
+            stack.addLast(i); seen[i] = true
+            while (stack.isNotEmpty()) {
+                val j = stack.removeLast()
+                val x = j % cols
+                val y = j / cols
+                group += intArrayOf(x, y)
+                for ((ax, ay) in listOf(1 to 0, -1 to 0, 0 to 1, 0 to -1)) {
+                    val nx = x + ax
+                    val ny = y + ay
+                    if (nx !in 0 until cols || ny !in 0 until rows) continue
+                    val k = ny * cols + nx
+                    if (!seen[k] && tiles[k] == SHELF) { seen[k] = true; stack.addLast(k) }
+                }
+            }
+            val minX = group.minOf { it[0] }
+            val maxX = group.maxOf { it[0] }
+            val minY = group.minOf { it[1] }
+            val maxY = group.maxOf { it[1] }
+            fun railAt(x: Int, y: Int) = isRail(x, y) && tileAt(x, y) == FLOOR
+            val dir = when {
+                group.all { railAt(maxX + 1, it[1]) } -> 1 to 0
+                group.all { railAt(minX - 1, it[1]) } -> -1 to 0
+                group.all { railAt(it[0], maxY + 1) } -> 0 to 1
+                group.all { railAt(it[0], minY - 1) } -> 0 to -1
+                else -> 0 to 0
+            }
+            if (dir.first != 0 || dir.second != 0) shelves += ShelfGroup(group, dir.first, dir.second)
+        }
+    }
+
+    /** Desliza un grupo un tile en (dx·s, dy·s). Devuelve los tiles que pasó a ocupar. */
+    fun shiftShelf(g: ShelfGroup, s: Int): List<IntArray> {
+        val dx = g.dx * s
+        val dy = g.dy * s
+        for (t in g.tiles) set(t[0], t[1], FLOOR)
+        val fresh = ArrayList<IntArray>()
+        for (t in g.tiles) {
+            t[0] += dx; t[1] += dy
+            set(t[0], t[1], SHELF)
+            fresh += intArrayOf(t[0], t[1])
+        }
+        return fresh
     }
     fun isWaterAt(x: Float, y: Float) = isWater(floor(x / TILE).toInt(), floor(y / TILE).toInt())
 
     fun isSolidTile(tx: Int, ty: Int, water: Boolean = false): Boolean = when (tileAt(tx, ty)) {
-        WALL, CRACK, CANDLE, CORAL -> true
+        WALL, CRACK, CANDLE, CORAL, SHELF, ATRIL -> true
         WATER, HOLE -> water
         DOOR -> !doorsOpen
         else -> false

@@ -17,7 +17,10 @@ SRC = os.path.join(ROOT, "tools", "salas.txt")
 OUT = os.path.join(ROOT, "assets", "rooms")
 
 WALL, WATER, SPAWN, PEDESTAL, GLASS, CANDLE = 1, 2, 3, 4, 5, 6
-SIZES = {"jefe": (30, 17), "cat_jefe": (30, 17), "grande_h": (52, 14), "grande_v": (26, 28)}
+SHELF, RAIL, ATRIL, MOLTEN = 7, 8, 9, 10
+EYE = 5  # marcador (capa de marcadores)
+WALKABLE = (0, GLASS, RAIL, MOLTEN)
+SIZES = {"jefe": (30, 17), "cat_jefe": (30, 17), "arc_jefe": (30, 17), "raz_jefe": (30, 17), "grande_h": (52, 14), "grande_v": (26, 28)}
 DEFAULT = (26, 14)
 
 
@@ -60,6 +63,11 @@ def build(room):
             elif ch == "~": terrain[y][x] = WATER
             elif ch == "V": terrain[y][x] = GLASS
             elif ch == "K": terrain[y][x] = CANDLE
+            elif ch == "E": terrain[y][x] = SHELF
+            elif ch == "=": terrain[y][x] = RAIL
+            elif ch == "A": terrain[y][x] = ATRIL
+            elif ch == "F": terrain[y][x] = MOLTEN
+            elif ch == "O": marks[y][x] = EYE
             elif ch == "S": marks[y][x] = SPAWN
             elif ch == "P": marks[y][x] = PEDESTAL
             elif ch != ".": errs.append(f"carácter desconocido '{ch}'")
@@ -90,7 +98,8 @@ def door_tiles(cols, rows):
 
 def validate(cols, rows, terrain, marks):
     # El vitral se pisa (cuenta como suelo para la validación).
-    t = [[0 if v == GLASS else v for v in row] for row in terrain]
+    # Las estanterías (E) cuentan como muro en su posición inicial.
+    t = [[0 if v in WALKABLE else v for v in row] for row in terrain]
     doors = door_tiles(cols, rows)
     for tiles in doors.values():
         for x, y in tiles:
@@ -113,7 +122,7 @@ def validate(cols, rows, terrain, marks):
         for x in range(cols):
             if marks[y][x] and (x, y) not in seen:
                 errs.append(f"marcador en ({x},{y}) inalcanzable")
-            if marks[y][x] and terrain[y][x] and not (terrain[y][x] == GLASS and marks[y][x] == SPAWN):
+            if marks[y][x] and terrain[y][x] not in (0, RAIL) and not (terrain[y][x] in (GLASS, MOLTEN) and marks[y][x] == SPAWN):
                 errs.append(f"marcador sobre muro/agua/vitral en ({x},{y})")
     return errs
 
@@ -147,21 +156,25 @@ def tmx(name, kind, cols, rows, terrain, marks):
 
 
 TSX = '''<?xml version="1.0" encoding="UTF-8"?>
-<tileset version="1.10" tiledversion="1.11.0" name="muelle" tilewidth="16" tileheight="16" tilecount="6" columns="6">
- <image source="muelle.png" width="96" height="16"/>
+<tileset version="1.10" tiledversion="1.11.0" name="muelle" tilewidth="16" tileheight="16" tilecount="10" columns="10">
+ <image source="muelle.png" width="160" height="16"/>
  <tile id="0"><properties><property name="tipo" value="muro"/></properties></tile>
  <tile id="1"><properties><property name="tipo" value="agua"/></properties></tile>
  <tile id="2"><properties><property name="tipo" value="aparicion"/></properties></tile>
  <tile id="3"><properties><property name="tipo" value="pedestal"/></properties></tile>
  <tile id="4"><properties><property name="tipo" value="vitral"/></properties></tile>
  <tile id="5"><properties><property name="tipo" value="candelabro"/></properties></tile>
+ <tile id="6"><properties><property name="tipo" value="estanteria"/></properties></tile>
+ <tile id="7"><properties><property name="tipo" value="riel"/></properties></tile>
+ <tile id="8"><properties><property name="tipo" value="atril"/></properties></tile>
+ <tile id="9"><properties><property name="tipo" value="vidrio_fundido"/></properties></tile>
 </tileset>
 '''
 
 
 def tileset_png(path):
     from PIL import Image, ImageDraw
-    img = Image.new("RGBA", (96, 16), (0, 0, 0, 0))
+    img = Image.new("RGBA", (160, 16), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     d.rectangle([0, 0, 15, 15], fill="#2c3946"); d.rectangle([0, 0, 15, 2], fill="#4a5b6a")
     d.rectangle([16, 0, 31, 15], fill="#1b4a60"); d.line([19, 6, 25, 6], fill="#2f7590"); d.line([22, 11, 28, 11], fill="#2f7590")
@@ -169,6 +182,10 @@ def tileset_png(path):
     d.rectangle([52, 4, 59, 15], fill="#9b7a52"); d.rectangle([54, 1, 57, 4], fill="#ffb547")
     d.rectangle([64, 0, 79, 15], fill="#3e6a78"); d.rectangle([66, 2, 71, 7], fill="#9fd6d0"); d.rectangle([72, 8, 77, 13], fill="#7a5aa0")
     d.rectangle([86, 6, 89, 15], fill="#9b917a"); d.rectangle([84, 3, 91, 5], fill="#d8cfb4"); d.rectangle([87, 0, 88, 2], fill="#ffb547")
+    d.rectangle([96, 0, 111, 15], fill="#4a3424"); d.rectangle([98, 2, 100, 13], fill="#8e3b36"); d.rectangle([102, 2, 104, 13], fill="#3b5a7a"); d.rectangle([106, 2, 108, 13], fill="#b08a3e")
+    d.line([112, 8, 127, 8], fill="#4a5f8e", width=2)
+    d.rectangle([134, 6, 137, 15], fill="#6b5a3e"); d.rectangle([132, 3, 139, 5], fill="#e8dcc0"); d.rectangle([135, 0, 136, 2], fill="#8fd694")
+    d.rectangle([144, 0, 159, 15], fill="#ff7a2f"); d.rectangle([147, 4, 152, 8], fill="#ffc36b")
     img.save(path)
 
 

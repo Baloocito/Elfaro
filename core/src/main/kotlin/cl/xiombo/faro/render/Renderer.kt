@@ -3,7 +3,21 @@ package cl.xiombo.faro.render
 import cl.xiombo.faro.data.Balance
 import cl.xiombo.faro.data.Biome
 import cl.xiombo.faro.data.Story
+import cl.xiombo.faro.data.Bottles
+import cl.xiombo.faro.world.Anguila
+import cl.xiombo.faro.world.Bibliotecario
 import cl.xiombo.faro.world.Campanero
+import cl.xiombo.faro.world.Cartografo
+import cl.xiombo.faro.world.Copista
+import cl.xiombo.faro.world.Corazon
+import cl.xiombo.faro.world.HijoDelFaro
+import cl.xiombo.faro.world.LamparaMadre
+import cl.xiombo.faro.world.OjoFosa
+import cl.xiombo.faro.world.PaperClone
+import cl.xiombo.faro.world.Polilla
+import cl.xiombo.faro.world.Tinta
+import cl.xiombo.faro.world.Trap
+import cl.xiombo.faro.world.Vidriero
 import cl.xiombo.faro.world.Cofrade
 import cl.xiombo.faro.world.Monaguillo
 import cl.xiombo.faro.world.Obispo
@@ -52,6 +66,7 @@ import com.badlogic.gdx.math.Matrix4
 import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.utils.Align
 import com.badlogic.gdx.utils.Disposable
+import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.max
@@ -246,7 +261,7 @@ class Renderer : Disposable {
         for (i in 0 until n) {
             val y = PauseMenu.itemY(i, n)
             col(if (i == m.sel) Pal.LAMP else Pal.NIGHT, if (i == m.sel) 0.9f else 0.8f)
-            shapes.rect(x0, y - PauseMenu.ITEM_H / 2f, PauseMenu.ITEM_W, PauseMenu.ITEM_H)
+            shapes.rect(x0, y - PauseMenu.itemH(n) / 2f, PauseMenu.ITEM_W, PauseMenu.itemH(n))
         }
         shapes.end()
 
@@ -257,11 +272,11 @@ class Renderer : Disposable {
         if (m.page == PauseMenu.Page.TITLE) text("Perlas ${Meta.perlas}" + if (Meta.shopOpen) "" else "  ·  la tienda del Santuario sigue cerrada", iw / 2f, 220f, Pal.SHELL, align = 0)
         if (m.page == PauseMenu.Page.TESTS) text("Runs de prueba: no guardan ni dan Perlas", iw / 2f, 220f, Pal.SHELL, align = 0)
         labels.forEachIndexed { i, label ->
-            val y = PauseMenu.itemY(i, n) + 5f
+            val y = PauseMenu.itemY(i, n) + if (n > 6) 4f else 5f
             text(label, iw / 2f, y, if (i == m.sel) Pal.OUTLINE else Pal.CREAM, align = 0)
         }
         val ctl = pad.controller
-        text(if (ctl == null) "Sin mando conectado" else "Mando: ${ctl.name.take(40)}", iw / 2f, 64f, Pal.SHELL, align = 0)
+        if (n <= 6) text(if (ctl == null) "Sin mando conectado" else "Mando: ${ctl.name.take(40)}", iw / 2f, 64f, Pal.SHELL, align = 0)
         if (m.note.isNotEmpty() && m.noteT > 0f) text(m.note, iw / 2f, 46f, if (m.noteError) Pal.CORAL else Pal.FOAM, align = 0)
         val hint = when {
             c.padActive || ctl != null -> "Stick o cruceta para elegir  ·  A aceptar  ·  B volver"
@@ -456,16 +471,32 @@ class Renderer : Disposable {
     /** Colores de la sala según el bioma (§10). */
     private class RoomPal(
         val void: Color, val wall: Color, val wallTop: Color, val floor: Color, val floor2: Color,
-        val seam: Color, val door: Color,
+        val seam: Color, val door: Color, val water: Color, val tide: Color,
     )
-    private val palMuelle = RoomPal(Pal.VOID, Pal.WALL, Pal.WALL_TOP, Pal.PLANK, Pal.PLANK2, Pal.SEAM, Pal.DOOR)
-    private val palCatedral = RoomPal(Pal.CAT_VOID, Pal.CAT_WALL, Pal.CAT_WALL_TOP, Pal.CAT_FLOOR, Pal.CAT_FLOOR2, Pal.CAT_SEAM, Pal.CAT_DOOR)
+    private val palMuelle = RoomPal(Pal.VOID, Pal.WALL, Pal.WALL_TOP, Pal.PLANK, Pal.PLANK2, Pal.SEAM, Pal.DOOR, Pal.WATER, Pal.TIDE)
+    private val palCatedral = RoomPal(Pal.CAT_VOID, Pal.CAT_WALL, Pal.CAT_WALL_TOP, Pal.CAT_FLOOR, Pal.CAT_FLOOR2, Pal.CAT_SEAM, Pal.CAT_DOOR, Pal.WATER, Pal.TIDE)
+    private val palArchivo = RoomPal(Pal.ARC_VOID, Pal.ARC_WALL, Pal.ARC_WALL_TOP, Pal.ARC_FLOOR, Pal.ARC_FLOOR2, Pal.ARC_SEAM, Pal.ARC_DOOR, Pal.INK, Pal.INK_HI)
+    private val palRaiz = RoomPal(Pal.RAZ_VOID, Pal.RAZ_WALL, Pal.RAZ_WALL_TOP, Pal.RAZ_FLOOR, Pal.RAZ_FLOOR2, Pal.RAZ_SEAM, Pal.RAZ_DOOR, Pal.RAZ_VOID, Pal.MOLTEN)
     private var rp = palMuelle
     private var catFloor = false
+    private var biomeNow = Biome.MUELLE
+    /** Rieles que avisan este fotograma (índice de tile). */
+    private val warnRails = HashSet<Int>()
 
     private fun drawScene(w: World, a: Float) {
-        catFloor = !w.inSanctuary && w.biome == Biome.CATEDRAL
-        rp = if (catFloor) palCatedral else palMuelle
+        biomeNow = if (w.inSanctuary) Biome.MUELLE else w.biome
+        catFloor = biomeNow == Biome.CATEDRAL
+        rp = when (biomeNow) {
+            Biome.CATEDRAL -> palCatedral
+            Biome.ARCHIVO -> palArchivo
+            Biome.RAIZ -> palRaiz
+            Biome.MUELLE -> palMuelle
+        }
+        warnRails.clear()
+        for (g in w.room.shelves) if (g.warnT > 0f) {
+            val s = if (g.offset == 0) 1 else -1
+            for (t in g.tiles) for (k in 0..2) warnRails += (t[1] + g.dy * s * k) * w.room.cols + (t[0] + g.dx * s * k)
+        }
         scene.begin()
         Gdx.gl.glClearColor(rp.void.r, rp.void.g, rp.void.b, 1f)
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
@@ -476,6 +507,7 @@ class Renderer : Disposable {
         shapes.begin(ShapeType.Filled)
         drawRoom(w)
         drawCatedral(w)
+        drawArchivoRaiz(w)
         if (w.brea) {
             col(Pal.BREA, 0.55f)
             shapes.rect(0f, 0f, w.room.width.toFloat(), w.room.height.toFloat())
@@ -642,6 +674,34 @@ class Renderer : Disposable {
                 Room.CANDLE -> {
                     drawPlank(tx, ty, x, y, t)
                 }
+                Room.SHELF -> {
+                    // Estantería con lomos de libros; tiembla mientras avisa.
+                    if (r.isRail(tx, ty)) drawPlank(tx, ty, x, y, t)
+                    val jig = if (warnRails.contains(ty * r.cols + tx) && (w.time * 20f).toInt() % 2 == 0) 1f else 0f
+                    outlined(x + 1f + jig, y + 1f, t - 2f, t - 2f, Pal.ARC_WALL_TOP)
+                    for (i in 0 until 4) {
+                        col(when ((tx * 3 + ty + i) % 3) { 0 -> Pal.BOOK_RED; 1 -> Pal.BOOK_BLUE; else -> Pal.BOOK_OCHRE })
+                        shapes.rect(x + 3f + i * 3f + jig, y + 3f, 2f, 10f)
+                    }
+                }
+                Room.ATRIL -> {
+                    drawPlank(tx, ty, x, y, t)
+                    outlined(x + 6f, y + 1f, 4f, 9f, Pal.ARC_DOOR)
+                    outlined(x + 2f, y + 9f, 12f, 3f, Pal.PAPER_DIM)
+                    val on = w.atrilesOn
+                    col(if (on) Pal.GREEN_LAMP else Pal.SEAM)
+                    shapes.rect(x + 7f, y + 12f, 2f, 3f)
+                }
+                Room.MOLTEN -> {
+                    val ph = ((w.time * 3f + tx * 0.9f + ty * 1.7f).toInt() % 3)
+                    col(Pal.MOLTEN)
+                    shapes.rect(x, y, t, t)
+                    col(Pal.MOLTEN_HI)
+                    shapes.rect(x + 2f + ph * 3f, y + 3f + ph, 4f, 3f)
+                    shapes.rect(x + 9f - ph, y + 10f, 3f, 2f)
+                    col(Pal.LAMP_DIM, 0.6f)
+                    shapes.rect(x, y, t, 1f)
+                }
                 Room.CORAL -> {
                     drawPlank(tx, ty, x, y, t)
                     outlined(x + 1f, y + 1f, t - 2f, t - 3f, Pal.CORAL_RED)
@@ -651,15 +711,15 @@ class Renderer : Disposable {
                     shapes.rect(x + 6f, y + 10f, 3f, 3f)
                 }
                 Room.WATER -> {
-                    col(Pal.WATER)
+                    col(rp.water)
                     shapes.rect(x, y, t, t)
                     val ph = ((w.time * 2f + tx * 0.7f + ty * 1.3f).toInt() % 4)
-                    col(Pal.TIDE)
+                    col(rp.tide)
                     shapes.rect(x + 2f + ph, y + 5f, 5f, 1f)
                     shapes.rect(x + 9f - ph, y + 11f, 4f, 1f)
                     // Borde de tablón sobre el agua (se lee el límite del pozo).
                     if (!r.isWater(tx, ty + 1) && r.tileAt(tx, ty + 1) == Room.FLOOR) {
-                        col(Pal.SEAM)
+                        col(rp.seam)
                         shapes.rect(x, y + t - 2f, t, 2f)
                     }
                 }
@@ -675,7 +735,102 @@ class Renderer : Disposable {
                         }
                     }
                 }
-                else -> drawPlank(tx, ty, x, y, t)
+                else -> {
+                    drawPlank(tx, ty, x, y, t)
+                    if (r.isRail(tx, ty)) {
+                        val warn = warnRails.contains(ty * r.cols + tx)
+                        val on = warn && (w.time * 10f).toInt() % 2 == 0
+                        col(if (warn) Pal.INK_HI else Pal.INK, if (on) 1f else 0.8f)
+                        shapes.rect(x, y + 5f, t, 1f)
+                        shapes.rect(x, y + 10f, t, 1f)
+                    }
+                }
+            }
+            // Archivo: las paredes que dan al suelo son estanterías fijas.
+            if (biomeNow == Biome.ARCHIVO && r.tileAt(tx, ty) == Room.WALL && ty > 0 && !r.isSolidTile(tx, ty - 1) && ty < r.rows - 1) {
+                for (i in 0 until 4) {
+                    col(when ((tx * 5 + ty + i) % 3) { 0 -> Pal.BOOK_RED; 1 -> Pal.BOOK_BLUE; else -> Pal.BOOK_OCHRE }, 0.75f)
+                    shapes.rect(x + 2f + i * 3.5f, y + 3f, 2f, 9f)
+                }
+            }
+        }
+    }
+
+    /** Trampas, líneas del Copista, rastro de tinta, haces y ecos de la Lámpara, avisos de la Anguila y del Ojo. */
+    private fun drawArchivoRaiz(w: World) {
+        val blink = (w.time * 10f).toInt() % 2 == 0
+        for (dot in w.ink) {
+            col(Pal.INK, (dot[2] / 3f).coerceIn(0f, 1f) * 0.9f)
+            shapes.rect(dot[0] - 2f, dot[1] - 1f, 4f, 3f)
+        }
+        for (t in w.traps) {
+            val k = 1f - t.t / t.maxT
+            if (t.kind == Trap.Kind.PAGE) {
+                col(Pal.CORAL, 0.15f + 0.25f * k)
+                shapes.circle(t.x, t.y, t.r, 16)
+                outlined(t.x - 3f, t.y - 4f, 6f, 8f, if (blink && k > 0.6f) Pal.CORAL else Pal.PAPER)
+                col(Pal.INK)
+                shapes.rect(t.x - 2f, t.y + 1f, 4f, 1f); shapes.rect(t.x - 2f, t.y - 1f, 3f, 1f)
+            } else {
+                col(Pal.ROOT_HI, if (blink) 0.6f else 0.35f)
+                shapes.circle(t.x, t.y, t.r * (0.5f + 0.5f * k), 16)
+                col(Pal.CORAL, 0.5f)
+                shapes.circle(t.x, t.y, 2f, 8)
+            }
+        }
+        for (l in w.lines) {
+            // Letras grises que se van escribiendo a lo largo de la línea.
+            val k = 1f - l.t / l.maxT
+            val n = 12
+            for (i in 0 until n) {
+                val f = i / (n - 1f)
+                if (f > k + 0.1f) break
+                val x = l.x0 + (l.x1 - l.x0) * f
+                val y = l.y0 + (l.y1 - l.y0) * f
+                col(if (k > 0.8f && blink) Pal.CORAL else Pal.PAPER_DIM, 0.85f)
+                shapes.rect(x - 1.5f, y - 1f, 3f, if (i % 3 == 0) 3f else 2f)
+            }
+        }
+        for (e in w.enemies) {
+            if (e is Anguila && e.phase == Anguila.Phase.WARN) {
+                col(Pal.ROOT_HI, if (blink) 0.65f else 0.35f)
+                shapes.circle(e.markX, e.markY, e.def.range, 18)
+            }
+            if (e is OjoFosa) {
+                if (e.state == EState.TELEGRAPH) {
+                    col(Pal.MOLTEN_HI, if (blink) 0.7f else 0.4f)
+                    shapes.rectLine(e.x, e.y, e.x + cos(e.aimA) * 400f, e.y + sin(e.aimA) * 400f, 1f)
+                }
+                if (e.rayT > 0f) {
+                    col(Pal.MOLTEN_HI, 0.95f)
+                    shapes.rectLine(e.x, e.y, e.x + cos(e.aimA) * e.rayLen, e.y + sin(e.aimA) * e.rayLen, 5f)
+                    col(Color.WHITE, 0.9f)
+                    shapes.rectLine(e.x, e.y, e.x + cos(e.aimA) * e.rayLen, e.y + sin(e.aimA) * e.rayLen, 2f)
+                }
+            }
+        }
+        val lamp = w.boss as? LamparaMadre ?: return
+        if (lamp.killed) return
+        val h = w.room.height.toFloat()
+        // Eco: la sala se tiñe del color del jefe copiado 1 s antes.
+        lamp.echo?.let { e ->
+            if (lamp.echoWarnT > 0f) { col(e.color, 0.28f); shapes.rect(0f, 0f, w.room.width.toFloat(), h) }
+            if (e == LamparaMadre.Echo.OBISPO && lamp.echoT > 0f && lamp.echoWarnT <= 0f) for (cx in lamp.colX) {
+                col(Pal.LAMP_HI, 0.14f); shapes.rect(cx - 16f, 0f, 32f, h)
+            }
+        }
+        for (a in lamp.beamAngles()) {
+            val ax = cos(a)
+            val ay = sin(a)
+            val len = LamparaMadre.BEAM_START + w.room.rayLength(lamp.x + ax * LamparaMadre.BEAM_START, lamp.y + ay * LamparaMadre.BEAM_START, ax, ay, 600f)
+            if (lamp.beamWarnT > 0f) {
+                col(Pal.LAMP_HI, if (blink) 0.45f else 0.2f)
+                shapes.rectLine(lamp.x, lamp.y, lamp.x + ax * len, lamp.y + ay * len, 1f)
+            } else {
+                col(Pal.LAMP_HI, 0.35f)
+                shapes.rectLine(lamp.x, lamp.y, lamp.x + ax * len, lamp.y + ay * len, 12f)
+                col(Pal.CREAM, 0.85f)
+                shapes.rectLine(lamp.x, lamp.y, lamp.x + ax * len, lamp.y + ay * len, 4f)
             }
         }
     }
@@ -749,6 +904,26 @@ class Renderer : Disposable {
 
     /** Tablones del muelle (o losas de la catedral): juntas desfasadas. */
     private fun drawPlank(tx: Int, ty: Int, x: Float, y: Float, t: Float) {
+        if (biomeNow == Biome.ARCHIVO) {
+            // Parqué de archivo: tablillas en espiga.
+            col(if ((tx + ty) % 2 == 0) rp.floor else rp.floor2)
+            shapes.rect(x, y, t, t)
+            col(rp.seam)
+            if ((tx + ty) % 2 == 0) { shapes.rect(x, y + 5f, t, 1f); shapes.rect(x, y + 11f, t, 1f) }
+            else { shapes.rect(x + 5f, y, 1f, t); shapes.rect(x + 11f, y, 1f, t) }
+            if ((tx * 7 + ty * 3) % 11 == 0) { col(Pal.PAPER_DIM, 0.5f); shapes.rect(x + 3f, y + 7f, 5f, 3f) }
+            return
+        }
+        if (biomeNow == Biome.RAIZ) {
+            // Roca agrietada con raíces.
+            col(if ((tx + ty) % 2 == 0) rp.floor else rp.floor2)
+            shapes.rect(x, y, t, t)
+            col(rp.seam)
+            shapes.rect(x + (tx * 3 % 7) + 3f, y + 2f, 1f, 6f)
+            shapes.rect(x + 2f, y + (ty * 5 % 9) + 4f, 6f, 1f)
+            if ((tx * 5 + ty * 7) % 9 == 0) { col(Pal.ROOT, 0.8f); shapes.rect(x + 1f, y + 8f, 12f, 2f) }
+            return
+        }
         if (catFloor) {
             col(if ((tx + ty) % 2 == 0) rp.floor else rp.floor2)
             shapes.rect(x, y, t, t)
@@ -867,6 +1042,14 @@ class Renderer : Disposable {
                 }
             }
             PedKind.AMPARO -> drawAmparo(x, y - 2f, w.time)
+            PedKind.BOTELLA -> {
+                outlined(x - 3f, y - 4f + bob, 6f, 9f, Pal.GLASS_TEAL)
+                outlined(x - 1f, y + 5f + bob, 2f, 3f, Pal.GLASS_TEAL)
+                col(Pal.PAPER)
+                shapes.rect(x - 1f, y - 2f + bob, 2f, 5f)
+                col(Pal.ARC_DOOR)
+                shapes.rect(x - 1f, y + 8f + bob, 2f, 1f)
+            }
             PedKind.OFRENDA_MAX, PedKind.OFRENDA_MITAD -> {
                 // Altar de piedra con el exvoto encima; la mancha de color dice qué pide.
                 outlined(x - 8f, y - 6f, 16f, 9f, Pal.STONE)
@@ -1047,16 +1230,34 @@ class Renderer : Disposable {
         val tele = e.state == EState.TELEGRAPH
         val blink = (w.time * 16f).toInt() % 2 == 0
 
+        // Solo existe lo que iluminas: fuera de tu luz no se dibuja (el Tachado deja ver su barra).
+        if (e.hidden) {
+            if (e.affix == Affix.TACHADO && e.hp < e.maxHp) {
+                col(Pal.OUTLINE); shapes.rect(x - 8f, y + e.hh + 5f, 16f, 3f)
+                col(Pal.TACHADO); shapes.rect(x - 7f, y + e.hh + 6f, 14f * (e.hp / e.maxHp), 1f)
+            }
+            return
+        }
         if (e is Sirena) { drawSirena(w, e, x, y, flash, blink); return }
         if (e is Obispo) { drawObispo(w, e, x, y, flash, blink); return }
+        if (e is Cartografo) { drawCartografo(w, e, x, y, flash, blink); return }
+        if (e is LamparaMadre) { drawLampara(w, e, x, y, flash, blink); return }
+        if (e is Anguila && e.phase != Anguila.Phase.EXPOSED) {
+            // Bajo el suelo: solo una onda en la tierra.
+            col(Pal.ROOT, 0.5f)
+            shapes.rect(x - 5f + sin(e.anim * 4f) * 2f, y - 3f, 10f, 1f)
+            return
+        }
 
         col(Pal.SHADOW)
         shapes.ellipse(x - e.hw, y - e.hh - 2f, e.hw * 2f, 5f)
         // Élite: aura del color del afijo.
         val affix = e.affix
         if (affix != null && !e.killed) {
+            // Hambre de luz: el aura crece un 10 % por cada 20 de tu Luz.
+            val grow = if (affix == Affix.HAMBRE) 2f * (w.player.luz / 20f).toInt() else 0f
             col(affix.color, if (blink) 0.9f else 0.55f)
-            shapes.rect(x - e.hw - 3f, y - e.hh - 3f, e.hw * 2f + 6f, e.hh * 2f + 6f)
+            shapes.rect(x - e.hw - 3f - grow, y - e.hh - 3f - grow, e.hw * 2f + 6f + grow * 2f, e.hh * 2f + 6f + grow * 2f)
         }
 
         when (e) {
@@ -1185,6 +1386,119 @@ class Renderer : Disposable {
                 outlined(cx - 4f, y + 3f, 9f, 3f, Pal.BONE)
             }
         }
+        when (e) {
+            is Tinta -> {
+                val c = if (flash) Color.WHITE else Pal.INK
+                val wob = sin(e.anim * 5f)
+                col(Pal.OUTLINE)
+                shapes.circle(x, y + 1f, 8f, 14)
+                col(c)
+                shapes.circle(x, y + 1f, 7f + wob * 0.5f, 14)
+                col(Pal.INK_HI)
+                shapes.rect(x - 3f, y + 2f, 2f, 2f); shapes.rect(x + 1f, y + 2f, 2f, 2f)
+                for (i in -1..1) { col(Pal.INK); shapes.rect(x + i * 4f, y - 8f - (e.anim * 3f + i).mod(3f), 1f, 3f) }
+                if (tele) { col(Pal.INK_HI, 0.6f); shapes.rectLine(x, y, x + e.dirX * 38f, y + e.dirY * 38f, 2f) }
+            }
+            is Bibliotecario -> {
+                val a2 = if (e.fading > 0f) (e.fading / 0.45f).coerceIn(0.15f, 1f) else 1f
+                val c = if (flash) Color.WHITE else Pal.PAPER_DIM
+                col(Pal.OUTLINE, a2); shapes.rect(x - 8f, y - 10f, 16f, 22f)
+                col(c, a2); shapes.rect(x - 7f, y - 9f, 14f, 20f)
+                col(Pal.ARC_WALL, a2); shapes.rect(x - 7f, y - 9f, 14f, 3f)
+                // Cara vacía: un óvalo de papel sin rasgos.
+                col(Pal.PAPER, a2); shapes.ellipse(x - 4f, y + 4f, 8f, 7f)
+                if (tele && e.fading <= 0f) { col(Pal.CORAL, 0.6f); shapes.rect(x + e.dirX * 12f - 3f, y + e.dirY * 12f - 3f, 6f, 6f) }
+            }
+            is Polilla -> {
+                val flap = if ((e.anim * 14f).toInt() % 2 == 0) 4f else 2f
+                col(if (flash) Color.WHITE else Pal.PAPER)
+                shapes.triangle(x, y, x - 5f, y + flap, x - 5f, y - 2f)
+                shapes.triangle(x, y, x + 5f, y + flap, x + 5f, y - 2f)
+                col(Pal.ARC_SEAM)
+                shapes.rect(x - 0.5f, y - 2f, 1f, 4f)
+            }
+            is Copista -> {
+                val c = if (flash) Color.WHITE else Pal.ARC_DOOR
+                outlined(x - 6f, y - 7f, 12f, 12f, c)
+                outlined(x - 4f, y + 5f, 8f, 6f, Pal.PAPER_DIM)
+                // Pluma
+                col(Pal.PAPER)
+                shapes.rectLine(x + 6f, y, x + 11f, y + 9f, 1f)
+                if (tele) { col(Pal.INK_HI, if (blink) 0.9f else 0.5f); shapes.rect(x + 9f, y - 1f, 3f, 3f) }
+            }
+            is PaperClone -> {
+                // Tu silueta en papel, con el golpe que repite.
+                col(Pal.PAPER, 0.85f)
+                shapes.rect(x - 5f, y - 8f, 10f, 12f)
+                shapes.rect(x - 4f, y + 4f, 8f, 7f)
+                col(Pal.INK, 0.8f)
+                shapes.rect(x - 5f, y - 8f, 10f, 1f)
+                if (e.swingT > 0f) {
+                    col(Pal.PAPER_DIM, 0.7f)
+                    val deg = atan2(e.swingDy, e.swingDx) * MathUtils.radiansToDegrees
+                    shapes.arc(x, y, 28f, deg - 30f, 60f, 10)
+                }
+            }
+            is HijoDelFaro -> {
+                // Isla en negativo: abrigo oscuro, ojos de lámpara y tu misma arma.
+                val c = if (flash) Color.WHITE else Pal.RAZ_WALL_TOP
+                outlined(x - 5f, y - 8f, 10f, 12f, c)
+                outlined(x - 4f, y + 4f, 8f, 7f, Pal.ROOT)
+                col(Pal.LAMP_HI)
+                shapes.rect(x - 2f, y + 7f, 1f, 1f); shapes.rect(x + 1f, y + 7f, 1f, 1f)
+                drawWeaponIcon(e.weapon, x + 8f, y + 1f, if (tele && blink) Pal.LAMP_HI else weaponColor(e.weapon))
+                if (tele) { col(Pal.CORAL, 0.5f); shapes.rectLine(x, y, x + e.dirX * 34f, y + e.dirY * 34f, 2f) }
+            }
+            is Vidriero -> {
+                val c = if (flash) Color.WHITE else Pal.GLASSY
+                outlined(x - 9f, y - 9f, 18f, 18f, c)
+                col(Pal.MOLTEN)
+                shapes.rect(x - 3f, y - 3f, 6f, 6f)
+                col(Pal.MOLTEN_HI)
+                shapes.rect(x - 1f, y - 1f, 2f, 2f)
+                if (e.crackT > 0f && blink) {
+                    col(Color.WHITE)
+                    shapes.rect(x - 7f, y + 2f, 6f, 1f); shapes.rect(x + 2f, y - 5f, 1f, 7f); shapes.rect(x - 2f, y - 7f, 1f, 4f)
+                }
+                if (tele) { col(Pal.MOLTEN, 0.3f); shapes.circle(x, y, e.def.range * (1f - e.stateT / e.def.telegraph), 18) }
+            }
+            is OjoFosa -> {
+                outlined(x - 7f, y - 6f, 14f, 12f, Pal.RAZ_WALL)
+                col(if (flash) Color.WHITE else Pal.BONE)
+                shapes.ellipse(x - 6f, y - 4f, 12f, 8f)
+                val p = w.player
+                val la = atan2(p.cy - y, p.cx - x)
+                col(if (e.state == EState.TELEGRAPH) Pal.MOLTEN_HI else Pal.MOLTEN)
+                shapes.circle(x + cos(la) * 2f, y + sin(la) * 1.5f, 2.5f, 10)
+                col(Pal.OUTLINE)
+                shapes.rect(x + cos(la) * 2f - 0.5f, y + sin(la) * 1.5f - 1f, 1f, 2f)
+            }
+            is Anguila -> {
+                // Expuesta: el cuerpo de raíz sale de la tierra.
+                val c = if (flash) Color.WHITE else Pal.ROOT_HI
+                for (i in 0 until 4) {
+                    val sx = x + sin(e.anim * 4f + i) * 2f
+                    outlined(sx - 4f + i * 0.5f, y - 6f + i * 5f, 8f - i, 6f, c)
+                }
+                col(Pal.MOLTEN_HI)
+                shapes.rect(x - 2f, y + 14f, 1f, 1f); shapes.rect(x + 1f, y + 14f, 1f, 1f)
+            }
+            is Corazon -> {
+                val beat = 1f + 0.1f * sin(e.anim * 5f)
+                col(Pal.OUTLINE)
+                shapes.circle(x, y, 13f * beat, 20)
+                col(if (flash) Color.WHITE else Pal.ROOT)
+                shapes.circle(x, y, 12f * beat, 20)
+                col(Pal.MOLTEN, 0.85f)
+                shapes.circle(x, y, 5f * beat, 14)
+                for (i in 0 until 6) {
+                    val a = i * MathUtils.PI2 / 6f
+                    col(Pal.ROOT_HI)
+                    shapes.rectLine(x + cos(a) * 10f, y + sin(a) * 10f, x + cos(a) * 22f, y + sin(a) * 22f, 3f)
+                }
+            }
+            else -> {}
+        }
         if (e.shielded) {
             col(Pal.BENDECIDO, if (blink) 0.75f else 0.5f)
             shapes.rect(x - e.hw - 4f, y + e.hh + 2f, e.hw * 2f + 8f, 1f)
@@ -1212,6 +1526,66 @@ class Renderer : Disposable {
             shapes.rect(x - 8f, y + e.hh + 5f, 16f, 3f)
             col(if (affix != null) affix.color else Pal.CORAL)
             shapes.rect(x - 7f, y + e.hh + 6f, 14f * (e.hp / e.maxHp), 1f)
+        }
+    }
+
+    /** El Cartógrafo: capa de mapas, sombrero de ala y un compás que se abre antes de disparar. */
+    private fun drawCartografo(w: World, c: Cartografo, x: Float, y: Float, flash: Boolean, blink: Boolean) {
+        col(Pal.SHADOW)
+        shapes.ellipse(x - 12f, y - 15f, 24f, 6f)
+        val cape = if (flash) Color.WHITE else Pal.PAPER_DIM
+        outlined(x - 11f, y - 13f, 22f, 20f, cape)
+        // Líneas de mapa en la capa.
+        col(Pal.INK, 0.8f)
+        shapes.rect(x - 9f, y - 6f, 18f, 1f); shapes.rect(x - 3f, y - 12f, 1f, 18f); shapes.rect(x + 4f, y - 10f, 1f, 9f)
+        outlined(x - 5f, y + 7f, 10f, 7f, Pal.SKIN)
+        col(Pal.OUTLINE)
+        shapes.rect(x - 9f, y + 13f, 18f, 2f)
+        shapes.rect(x - 5f, y + 15f, 10f, 4f)
+        col(Pal.OUTLINE)
+        shapes.rect(x - 2f, y + 10f, 1f, 1f); shapes.rect(x + 2f, y + 10f, 1f, 1f)
+        // Compás: 4 brazos que se abren en los últimos 0,4 s.
+        val open = (1f - (c.compassT / 0.4f)).coerceIn(0f, 1f)
+        val armL = 6f + open * 10f
+        for (k in 0 until 4) {
+            val a = c.compassA + k * PI.toFloat() / 2f
+            col(if (open > 0f && blink) Pal.LAMP_HI else Pal.INK_HI)
+            shapes.rectLine(x, y + 2f, x + cos(a) * armL, y + 2f + sin(a) * armL, 1.5f)
+        }
+        if (c.exposedT > 0f) {
+            val t = w.time * 6f
+            col(Pal.LAMP_HI)
+            shapes.rect(x + cos(t) * 9f - 1f, y + 24f + sin(t) * 2f, 2f, 2f)
+            shapes.rect(x - cos(t) * 9f - 1f, y + 24f - sin(t) * 2f, 2f, 2f)
+        }
+    }
+
+    /** La Lámpara Madre: jaula de cristal con la llama; desde la fase 2 se abre y se ve un ojo. */
+    private fun drawLampara(w: World, l: LamparaMadre, x: Float, y: Float, flash: Boolean, blink: Boolean) {
+        col(Pal.SHADOW)
+        shapes.ellipse(x - 20f, y - 22f, 40f, 8f)
+        outlined(x - 14f, y - 22f, 28f, 6f, Pal.STONE)
+        val glass = if (flash) Color.WHITE else Pal.GLASSY
+        col(Pal.OUTLINE)
+        shapes.rect(x - 15f, y - 16f, 30f, 34f)
+        col(glass, 0.55f)
+        shapes.rect(x - 14f, y - 15f, 28f, 32f)
+        for (i in 0 until 4) { col(Pal.STONE); shapes.rect(x - 14f + i * 9f, y - 15f, 2f, 32f) }
+        outlined(x - 16f, y + 17f, 32f, 4f, Pal.STONE)
+        val open = l.phase >= 2
+        if (open) {
+            // Dentro: la criatura mira.
+            col(Pal.RAZ_VOID)
+            shapes.ellipse(x - 9f, y - 6f, 18f, 12f)
+            col(if (l.drinking && blink) Pal.CORAL else Pal.MOLTEN)
+            shapes.ellipse(x - 4f, y - 3f, 8f, 6f)
+            col(Pal.OUTLINE)
+            shapes.rect(x - 0.5f, y - 3f, 1f, 6f)
+        } else {
+            col(Pal.LAMP)
+            shapes.rect(x - 5f, y - 6f, 10f, 12f)
+            col(Pal.LAMP_HI)
+            shapes.rect(x - 2f, y - 2f, 4f, 6f)
         }
     }
 
@@ -1341,11 +1715,13 @@ class Renderer : Disposable {
                 PedKind.DESCENSO -> light(ped.x, ped.y, 46f, 0.8f)
                 PedKind.OFRENDA_MAX, PedKind.OFRENDA_MITAD -> if (!ped.taken) light(ped.x, ped.y + 8f, 34f, 0.8f)
                 PedKind.JAULA -> light(ped.x, ped.y + 8f, if (ped.taken) 24f else 40f, 0.75f)
+                PedKind.BOTELLA -> if (!ped.taken) light(ped.x, ped.y + 4f, 30f, 0.8f)
                 PedKind.AMPARO -> light(ped.x, ped.y + 8f, 40f, 0.8f)
                 else -> if (!ped.taken) light(ped.x, ped.y + 6f, 26f, 0.7f)
             }
         }
-        if (p.hazT > 0f) {
+        val dark = (w.boss as? Cartografo)?.let { it.phase == 3 && !it.killed } == true
+        if (p.hazT > 0f && !dark) {
             var t = 0f
             while (t <= p.hazLen) {
                 light(p.cx + p.aimX * t, p.cy + p.aimY * t, 24f, 0.8f)
@@ -1355,6 +1731,12 @@ class Renderer : Disposable {
         if (p.swingActive && p.weapon == Weapon.FAROL) light(p.cx + p.atkDx * 18f, p.cy + p.atkDy * 18f, 26f, 0.5f)
         p.harpoon?.let { light(it.x, it.y, 14f, 0.5f) }
         for (b in w.fx.blasts) light(b.x, b.y, b.r * 2.2f * (b.t / b.maxT), 1f)
+        if (w.atrilesOn) for (a in w.atriles) light(a[0], a[1] + 4f, World.ATRIL_LIGHT, 0.85f)
+        if (w.room.hasMolten) for (t in w.room.tilesOf(Room.MOLTEN)) {
+            val c = w.room.tileCenter(t[0], t[1])
+            light(c[0], c[1], 40f, 0.55f)
+        }
+        for (t in w.traps) light(t.x, t.y, 16f, 0.5f)
         for (c in w.candles) if (c.lit) {
             val fl = 1f + 0.04f * sin(w.time * 9f + c.x)
             light(c.x, c.y + 6f, World.CANDLE_LIGHT * fl * min(1f, 0.4f + c.litT * 3f), 0.95f)
@@ -1442,6 +1824,21 @@ class Renderer : Disposable {
             return
         }
 
+        // Raíz: el latido tiñe los bordes; la Lámpara que bebe luz los pone rojos.
+        if (w.biome == Biome.RAIZ) {
+            val pulse = when {
+                w.beatBoostT > 0f -> 0.22f * (w.beatBoostT / World.BEAT_BOOST_TIME)
+                w.beatT < 1f -> 0.12f * (1f - w.beatT)
+                else -> 0f
+            }
+            if (pulse > 0f) {
+                col(Pal.HUNGER, pulse)
+                shapes.rect(0f, 0f, iw.toFloat(), 10f); shapes.rect(0f, ih - 10f, iw.toFloat(), 10f)
+                shapes.rect(0f, 0f, 10f, ih.toFloat()); shapes.rect(iw - 10f, 0f, 10f, ih.toFloat())
+            }
+        }
+        val drinking = (w.boss as? LamparaMadre)?.drinking == true
+
         // Barra de Luz (1 px por punto de Luz máxima)
         val bx = 8f
         val by = ih - 14f
@@ -1449,7 +1846,8 @@ class Renderer : Disposable {
         shapes.rect(bx - 1f, by - 1f, p.luzMax + 2f, 8f)
         col(Pal.NIGHT)
         shapes.rect(bx, by, p.luzMax, 6f)
-        col(if (p.luz < Balance.LOW_LUZ) Pal.CORAL else Pal.LAMP)
+        val redPulse = drinking && (w.time * 4f).toInt() % 2 == 0
+        col(if (p.luz < Balance.LOW_LUZ || redPulse) Pal.CORAL else Pal.LAMP)
         shapes.rect(bx, by, max(0f, p.luz), 6f)
         col(Pal.LAMP_HI)
         shapes.rect(bx, by + 4f, max(0f, p.luz), 1f)
@@ -1538,6 +1936,8 @@ class Renderer : Disposable {
                     CellType.ANTESALA -> Pal.LAMP_DIM
                     CellType.CAPILLA -> if (c.pedestals.any { !it.taken } || !c.stocked) Pal.LILAC else null
                     CellType.CELDA -> if (c.pedestals.any { !it.taken } || !c.stocked) Pal.SKIN else null
+                    CellType.LECTURA -> if (c.cleared) null else Pal.PAPER
+                    CellType.CORAZON -> if (c.cleared) null else Pal.ROOT_HI
                     else -> null
                 }
                 if (icon != null) {
@@ -1640,11 +2040,13 @@ class Renderer : Disposable {
             World.Mode.VICTORY -> {
                 val mm = (w.time / 60f).toInt()
                 val ss = (w.time % 60f).toInt()
-                text("${w.biome.label} COMPLETADA", iw / 2f, ih * 0.74f, Pal.LAMP, align = 0)
-                text("Tiempo ${mm}:${ss.toString().padStart(2, '0')}  ·  ${w.kills} bajas  ·  ${w.owned.size} exvotos", iw / 2f, ih * 0.62f, Pal.CREAM, align = 0)
-                text("Perlas +${w.perlasRun}   (total ${Meta.perlas})", iw / 2f, ih * 0.54f, Pal.SHELL, align = 0)
-                text(Story.VICTORIA_F2, iw / 2f, ih * 0.42f, Pal.CREAM, align = 0)
-                if (w.modeT > 1.8f) text(anyKeyText(c, "volver al Santuario"), iw / 2f, ih * 0.32f, Pal.LAMP_HI, align = 0)
+                val ending = if (w.biome == Biome.RAIZ) (if (Meta.allBottles) Story.FINAL_B else Story.FINAL_A) else null
+                text(ending?.first ?: "${w.biome.label} COMPLETADA", iw / 2f, ih * 0.80f, Pal.LAMP, align = 0)
+                ending?.let { text(it.second, iw / 2f, ih * 0.72f, Pal.CREAM, align = 0, wrap = iw * 0.8f) }
+                text("Tiempo ${mm}:${ss.toString().padStart(2, '0')}  ·  ${w.kills} bajas  ·  ${w.owned.size} exvotos", iw / 2f, ih * 0.52f, Pal.CREAM, align = 0)
+                text("Perlas +${w.perlasRun}   (total ${Meta.perlas})", iw / 2f, ih * 0.45f, Pal.SHELL, align = 0)
+                text(if (Meta.allBottles) Story.VICTORIA_FINAL else Story.VICTORIA_FINAL + "  Botellas: ${Meta.bottles.size}/${Bottles.all.size}", iw / 2f, ih * 0.37f, Pal.CREAM, align = 0, wrap = iw * 0.85f)
+                if (w.modeT > 1.8f) text(anyKeyText(c, "volver al Santuario"), iw / 2f, ih * 0.25f, Pal.LAMP_HI, align = 0)
             }
             else -> {}
         }
