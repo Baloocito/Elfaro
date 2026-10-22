@@ -4,7 +4,7 @@ package cl.xiombo.faro.data
  * Textos de historia (§9). Los jefes eran habitantes de Puerto Velatorio: cada uno deja un
  * recuerdo la primera vez que cae. Cada bioma abre con un título y una línea.
  *
- * La fuente del juego no tiene "—", "→" ni "…": usar solo Latin-1.
+ * La fuente del juego no tiene "—", "→", "…" ni las comillas « »: usar comillas rectas.
  */
 object Story {
     class Memory(val title: String, val text: String)
@@ -25,8 +25,8 @@ object Story {
     val OBISPO = Memory(
         "Recuerdo de Teodoro, obispo de Puerto Velatorio",
         "Cada invierno subía al faro a bendecir la lámpara. Nunca pregunté por qué el Farero me pedía " +
-            "rezar mirando al agua y no al cielo. La última vez me dijo: «Padre, no es a nosotros a quien " +
-            "alumbra». Lo tomé por una broma de viejo. Debí escucharlo.",
+            "rezar mirando al agua y no al cielo. La última vez me dijo: \"Padre, no es a nosotros a quien " +
+            "alumbra\". Lo tomé por una broma de viejo. Debí escucharlo.",
     )
 
     fun memoryOf(bossId: String): Memory? = when (bossId) {

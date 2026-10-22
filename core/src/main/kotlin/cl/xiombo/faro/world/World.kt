@@ -1355,7 +1355,7 @@ class World private constructor(val seed: Long, val kind: Kind) {
         )
     }
 
-    /** F3: carta + Luz llena · F4: ir al jefe · F5: exvoto (en el Santuario: +50 Perlas y todas las armas) · F6: 150 de daño · F8: Isla recibe 40 · F9: siguiente sala grande o antesala · F10: exvotos de Velar · F11: saltar a la Catedral (o volver al Muelle). */
+    /** F3: carta + Luz llena · F4: ir al jefe · F5: exvoto (en el Santuario: +50 Perlas y todas las armas) · F6: 150 de daño · F8: Isla recibe 40 · F9: siguiente sala (grandes, antesala y capilla primero) · F10: exvotos de Velar · F11: saltar a la Catedral (o volver al Muelle). */
     private fun debugCommand(cmd: Int) {
         when (cmd) {
             3 -> { if (!inSanctuary) { revealMap(); player.luz = player.luzMax } }
@@ -1384,10 +1384,11 @@ class World private constructor(val seed: Long, val kind: Kind) {
                 showBanner("DEBUG: EXVOTOS DE VELAR", 1.5f)
             }
             9 -> if (!inSanctuary) {
-                // Salta a la siguiente sala grande o antesala del piso (para probarlas).
-                val list = map.all.filter { (it.partner != null && it.anchor) || it.type == CellType.ANTESALA }
-                if (list.isEmpty()) showBanner("DEBUG: NO HAY SALAS GRANDES EN ESTE PISO", 1.5f)
-                else enterCell(list[(list.indexOf(cell) + 1) % list.size], null)
+                // Salta a la siguiente sala del piso: primero grandes, antesala y capilla; luego el resto.
+                val first = map.all.filter { it.anchor && ((it.partner != null) || it.type == CellType.ANTESALA || it.type == CellType.CAPILLA) }
+                val rest = map.all.filter { it.anchor && it !in first && it.type != CellType.BOSS && it.type != CellType.START }
+                val list = first + rest
+                if (list.isNotEmpty()) enterCell(list[(list.indexOf(cell) + 1) % list.size], null)
             }
             8 -> if (!inSanctuary) hurtPlayer(40f, player.cx + 10f, player.cy, enemies.firstOrNull(), "Depuración (F8)")
         }
