@@ -35,6 +35,22 @@ object Story {
         else -> null
     }
 
+    /** Amparo, la guardesa del faro: está encerrada en una celda del Muelle. Abre la tienda del Santuario. */
+    val AMPARO = Memory(
+        "Amparo, la guardesa del faro",
+        "Llevo veinte años en esta celda. El Farero me encerró la noche en que quise volver a encender " +
+            "la lámpara; dijo que era por el bien de todos. Sube al Santuario, niña. Allí te guardaré " +
+            "lo que traigas de abajo.",
+    )
+
+    /** Lo que dice Amparo en el Santuario (una frase distinta cada vez que le hablas). */
+    val AMPARO_LINES = listOf(
+        "Guardo lo que traes de abajo. Las Perlas compran tiempo, no milagros.",
+        "El Farero no estaba loco. Sabía algo que nosotros no.",
+        "Si bajas a la Catedral, no mires los vitrales mucho rato.",
+        "La lámpara no se apagó sola. Eso lo sé desde hace veinte años.",
+    )
+
     const val CAPILLA = "El altar pide luz. Lo que da a cambio brilla más."
     const val VICTORIA_F2 = "Bajo la catedral, el Archivo de los Náufragos espera. Llega en la F3."
 }
