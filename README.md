@@ -15,7 +15,26 @@ Cada push a `main` compila el juego en GitHub Actions y actualiza la release **d
 El APK siempre se firma con la misma keystore de desarrollo (`android/debug.keystore`),
 así que cada versión nueva se instala encima de la anterior sin perder nada.
 
-## Estado: F2-base · Santuario y armas
+## Estado: F2 · Catedral Sumergida
+
+La run ya no termina en la Sirena: tras vencerla, una escalera baja a la **Catedral Sumergida**
+(pisos 4-6) y la versión termina con el **Obispo Coral**.
+
+- **Vitrales**: se agrietan al pisarlos y 1,2 s después se rompen en un pozo. El Destello no los
+  agrieta. Si un enemigo que camina está encima cuando se rompen, cae: pierde un 30 % de vida.
+- **Candelabros**: un golpe, el Haz, el Arpón, la Campana o el Fogonazo los encienden. Dan una luz
+  fija de 64 px y +2 de Luz la primera vez. La onda del Campanero los apaga.
+- **Enemigos**: Monaguillo de sal (abanico de cristales a distancia), Campanero (la onda baja tu
+  luz un 40 % durante 3 s), Vela errante (kamikaze que roba 5 de Luz) y Cofrade de coral (golpe en
+  línea de 64 px; al morir deja coral 4 s). Afijo nuevo: **Bendecido** (escudo que absorbe un golpe cada 4 s).
+- **Capilla de la ofrenda**: un exvoto raro o épico a cambio de 10 de Luz máxima o de la mitad de tu Luz.
+- **El Obispo Coral** (1.500 de vida, 3 fases): barridos del báculo e invocaciones; columnas de luz
+  que curan a sus fieles; el coral encoge la arena. Da 12 Perlas y desbloquea la Campana.
+- **Historia**: título de capítulo al entrar en cada bioma y el recuerdo de cada jefe la primera vez
+  que cae (Ondina, la cantora del muelle; Teodoro, el obispo).
+- Debug: F11 salta a la Catedral (o vuelve al Muelle).
+
+## F2-base · Santuario y armas
 
 Todo lo de la F1, más los requisitos previos a los biomas 2-4 (§13 del documento de diseño):
 
