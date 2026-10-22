@@ -23,11 +23,15 @@ enum class Dir(val dx: Int, val dy: Int) {
         get() = when (this) { LEFT -> RIGHT; RIGHT -> LEFT; DOWN -> UP; UP -> DOWN }
 }
 
+/** Puerta en un lado de la sala, en la subcelda (sx, sy). Las salas normales solo tienen la (0, 0). */
+data class DoorSpec(val side: Dir, val sx: Int = 0, val sy: Int = 0)
+
 /**
  * Una sala construida a partir de una plantilla de Tiled. Las puertas se abren solo hacia
- * salas vecinas; hacia una sala secreta se dibuja una pared agrietada que abre el Haz.
+ * salas vecinas; hacia una sala secreta se dibuja una pared agrietada que abren el Haz y la Campana.
+ * Las salas grandes ocupan 2 celdas (52 × 14 o 26 × 28) y tienen una puerta por subcelda.
  */
-class Room(val template: RoomTemplate, val doorSides: Set<Dir>, val crackSide: Dir?) {
+class Room(val template: RoomTemplate, val doors: Set<DoorSpec>, val crack: DoorSpec?) {
     companion object {
         const val FLOOR = 0
         const val WALL = 1
@@ -38,6 +42,12 @@ class Room(val template: RoomTemplate, val doorSides: Set<Dir>, val crackSide: D
 
     val cols = template.cols
     val rows = template.rows
+    /** Subceldas en horizontal y vertical (2 en las salas grandes). */
+    val nx = if (cols >= 52) 2 else 1
+    val ny = if (rows >= 28) 2 else 1
+    private val subCols = cols / nx
+    private val subRows = rows / ny
+    val crackSide: Dir? get() = crack?.side
     val width = cols * TILE
     val height = rows * TILE
     private val tiles = IntArray(cols * rows)
@@ -56,15 +66,15 @@ class Room(val template: RoomTemplate, val doorSides: Set<Dir>, val crackSide: D
                 else -> FLOOR
             }
         }
-        for (side in doorSides) carve(side, DOOR)
-        if (crackSide != null) carve(crackSide, CRACK)
+        for (d in doors) carve(d, DOOR)
+        if (crack != null) carve(crack, CRACK)
     }
 
-    /** Tiles del hueco de la puerta en un lado (2 tiles en el centro de la pared). */
-    fun gapTiles(side: Dir): List<IntArray> {
-        val ry = listOf(rows / 2 - 1, rows / 2)
-        val cx = listOf(cols / 2 - 1, cols / 2)
-        return when (side) {
+    /** Tiles del hueco de una puerta (2 tiles en el centro de la pared de su subcelda). */
+    fun gapTiles(d: DoorSpec): List<IntArray> {
+        val ry = listOf(d.sy * subRows + subRows / 2 - 1, d.sy * subRows + subRows / 2)
+        val cx = listOf(d.sx * subCols + subCols / 2 - 1, d.sx * subCols + subCols / 2)
+        return when (d.side) {
             Dir.LEFT -> ry.map { intArrayOf(0, it) }
             Dir.RIGHT -> ry.map { intArrayOf(cols - 1, it) }
             Dir.DOWN -> cx.map { intArrayOf(it, 0) }
@@ -72,8 +82,15 @@ class Room(val template: RoomTemplate, val doorSides: Set<Dir>, val crackSide: D
         }
     }
 
-    private fun carve(side: Dir, gapType: Int) {
-        for (g in gapTiles(side)) {
+    /** Subcelda en la que está un punto de la sala. */
+    fun subAt(x: Float, y: Float): IntArray = intArrayOf(
+        (x / (subCols * TILE)).toInt().coerceIn(0, nx - 1),
+        (y / (subRows * TILE)).toInt().coerceIn(0, ny - 1),
+    )
+
+    private fun carve(d: DoorSpec, gapType: Int) {
+        val side = d.side
+        for (g in gapTiles(d)) {
             set(g[0], g[1], gapType)
             // Pasillo de 3 tiles hacia dentro siempre libre.
             for (k in 1..3) {
@@ -172,13 +189,23 @@ class Room(val template: RoomTemplate, val doorSides: Set<Dir>, val crackSide: D
 
     fun tileCenter(tx: Int, ty: Int) = floatArrayOf(tx * TILE + TILE / 2f, ty * TILE + TILE / 2f)
 
-    /** Punto de entrada al llegar por un lado (dentro de la sala, frente a la puerta). */
-    fun entryPoint(side: Dir): FloatArray = when (side) {
-        Dir.LEFT -> floatArrayOf(TILE * 1.6f, (rows / 2) * TILE.toFloat() - 2f)
-        Dir.RIGHT -> floatArrayOf(width - TILE * 1.6f, (rows / 2) * TILE.toFloat() - 2f)
-        Dir.DOWN -> floatArrayOf((cols / 2) * TILE.toFloat(), TILE * 1.4f)
-        Dir.UP -> floatArrayOf((cols / 2) * TILE.toFloat(), height - TILE * 2.2f)
+    /** Punto de entrada al llegar por una puerta (dentro de la sala, frente a ella). */
+    fun entryPoint(d: DoorSpec): FloatArray {
+        val midY = (d.sy * subRows + subRows / 2) * TILE.toFloat() - 2f
+        val midX = (d.sx * subCols + subCols / 2) * TILE.toFloat()
+        return when (d.side) {
+            Dir.LEFT -> floatArrayOf(TILE * 1.6f, midY)
+            Dir.RIGHT -> floatArrayOf(width - TILE * 1.6f, midY)
+            Dir.DOWN -> floatArrayOf(midX, TILE * 1.4f)
+            Dir.UP -> floatArrayOf(midX, height - TILE * 2.2f)
+        }
     }
+
+    /** Centro de la subcelda (sx, sy), a la altura de las puertas laterales. */
+    fun subCenter(sx: Int, sy: Int) = floatArrayOf(
+        (sx * subCols + subCols / 2) * TILE.toFloat(),
+        (sy * subRows + subRows / 2) * TILE.toFloat() - 2f,
+    )
 
     /** Tile libre más cercano al punto (para colocar objetos). */
     fun nearestFloor(x: Float, y: Float): FloatArray {

@@ -19,7 +19,7 @@ class PauseMenu {
     enum class Mode { MAIN, CONFIG }
 
     companion object {
-        val ITEMS = listOf("Continuar", "Configurar mando", "Nueva run")
+        val ITEMS = listOf("Continuar", "Configurar mando", "Abandonar run")
 
         // Disposición en coordenadas internas (480 × 270), compartida con Renderer y Controls.
         const val ITEM_Y0 = 160f
@@ -77,7 +77,10 @@ class PauseMenu {
         private set
     var sel = 0
         private set
-    var restartRequested = false
+    /** Pedido de abandonar la run (cuenta como muerte y vuelve al Santuario). */
+    var abandonRequested = false
+    /** false en el Santuario: ahí no hay run que abandonar. */
+    var inRun = true
 
     // Configuración
     var layout: Layout? = null
@@ -148,7 +151,7 @@ class PauseMenu {
                     say("Elige un hueco y pulsa A para asignarle un botón")
                 }
             }
-            2 -> { restartRequested = true; open = false }
+            2 -> if (inRun) { abandonRequested = true; open = false } else say("Ya estás en el Santuario")
         }
     }
 

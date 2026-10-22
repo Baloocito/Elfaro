@@ -15,7 +15,26 @@ Cada push a `main` compila el juego en GitHub Actions y actualiza la release **d
 El APK siempre se firma con la misma keystore de desarrollo (`android/debug.keystore`),
 así que cada versión nueva se instala encima de la anterior sin perder nada.
 
-## Estado: F1 · Núcleo roguelike
+## Estado: F2-base · Santuario y armas
+
+Todo lo de la F1, más los requisitos previos a los biomas 2-4 (§13 del documento de diseño):
+
+- **Santuario** entre runs. Aquí se elige el arma, el exvoto inicial y se compran las mejoras
+  permanentes con Perlas. Las Perlas se ganan así: +1 por piso y +5 por jefe.
+- **Cuatro armas**, cada una con su mejora:
+  - Farol (gratis).
+  - Arpón (se desbloquea al vencer a la Sirena).
+  - Ancla (60 Perlas).
+  - Campana (se desbloquea con el Obispo).
+- **Aturdido**: a los jefes les dura la mitad del tiempo y luego quedan 2 s inmunes; mientras dura,
+  el enemigo recibe +25 % de daño. El Ancla y los golpes contra la pared lo provocan.
+- **Antesala del jefe** con el **Farol de vigilia**: cura +30 si te queda menos del 50 % de Luz,
+  +20 si te queda menos del 80 % y +10 en otro caso.
+- **Salas grandes** que ocupan dos celdas (horizontales o verticales).
+- **Muerte legible**: se ve qué te mató, en qué sala y con cuánta Luz habías entrado.
+- **Guardado de la run** al entrar en cada sala y al pausar. Se puede abandonar la run desde la pausa.
+
+## F1 · Núcleo roguelike
 
 Una run completa del bioma 1, el Muelle Ahogado: 3 pisos y la Sirena de Brea.
 
@@ -48,7 +67,7 @@ F0 (prototipo de sensación) está completa: movimiento, Destello, Farol, Haz, l
 | Usar / comprar | E / Enter        | Botón USAR (aparece cerca)     | Y                           |
 | Pausa    | Esc / P                | Botón II o atrás               | Start / Select              |
 | Debug    | F1 cajas y FPS · F2 luz on/off | —                      | —                           |
-| Con F1   | F3 carta y Luz llena · F4 ir al jefe · F5 exvoto · F6 150 de daño · F7 mando virtual (teclas 1–0) | — | — |
+| Con F1   | F3 carta y Luz llena · F4 ir al jefe · F5 exvoto (en el Santuario: +50 Perlas y todas las armas) · F6 150 de daño · F8 Isla recibe 40 · F9 salta a sala grande o antesala · F7 mando virtual (teclas 1–0) | — | — |
 
 **Mando:** se conecta por Bluetooth en los ajustes del teléfono y el juego lo detecta solo.
 Al usarlo se ocultan los controles táctiles, y vuelven a aparecer al tocar la pantalla.

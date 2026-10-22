@@ -3,23 +3,48 @@ package cl.xiombo.faro.world
 import cl.xiombo.faro.data.Balance
 import cl.xiombo.faro.data.ExvotoDef
 import cl.xiombo.faro.data.Tag
+import cl.xiombo.faro.data.Weapon
 import com.badlogic.gdx.graphics.Color
 
-enum class PedKind { EXVOTO, MECHA, MEJORA, MAPA, REFUGIO, ESCALERA, FIN }
+enum class PedKind {
+    EXVOTO, MECHA, MEJORA, MAPA, REFUGIO, ESCALERA, FIN, VIGILIA,
+    // Santuario
+    ARMA, INICIAL, META, DESCENSO,
+}
 
-/** Objeto con el que se interactúa (E / USAR): exvotos, compras de la tienda, farol del refugio, escalera. */
-class Pedestal(val x: Float, val y: Float, val kind: PedKind, val exvoto: ExvotoDef? = null, val price: Int = 0) {
+/**
+ * Objeto con el que se interactúa (E / USAR): exvotos, compras de la tienda, farol del refugio,
+ * escalera, Farol de vigilia y, en el Santuario, armas, mejoras de meta y el pozo de descenso.
+ * [price] es Luz en la run y Perlas en el Santuario.
+ */
+class Pedestal(
+    val x: Float, val y: Float, val kind: PedKind,
+    val exvoto: ExvotoDef? = null, val price: Int = 0,
+    val weapon: Weapon? = null,
+    val metaId: String? = null,
+    val metaTitle: String = "",
+    val metaDetail: String = "",
+) {
     var taken = false
+    /** Bloqueado (Santuario): se ve, pero explica qué falta. */
+    var lockedText: String? = null
+    /** Elegido (arma equipada o exvoto inicial). */
+    var selected = false
 
     val title: String
         get() = when (kind) {
             PedKind.EXVOTO -> exvoto!!.name
             PedKind.MECHA -> "Mecha"
-            PedKind.MEJORA -> "Mejora del Farol"
+            PedKind.MEJORA -> "Mejora del ${weapon?.label ?: "arma"}"
             PedKind.MAPA -> "Carta del piso"
             PedKind.REFUGIO -> "Farol del refugio"
             PedKind.ESCALERA -> "Escalera al siguiente piso"
             PedKind.FIN -> "Luz del Muelle"
+            PedKind.VIGILIA -> "Farol de vigilia"
+            PedKind.ARMA -> weapon!!.label
+            PedKind.INICIAL -> exvoto!!.name
+            PedKind.META -> metaTitle
+            PedKind.DESCENSO -> "Bajar al faro"
         }
 
     val detail: String
@@ -30,17 +55,23 @@ class Pedestal(val x: Float, val y: Float, val kind: PedKind, val exvoto: Exvoto
                 "$tag${e.rarity.label}. ${e.desc}"
             }
             PedKind.MECHA -> "+10 de Luz máxima (tope 200)."
-            PedKind.MEJORA -> "+20 % de daño del Farol (máx. 3)."
+            PedKind.MEJORA -> "${weapon?.upgradeText ?: ""} (máx. 3)."
             PedKind.MAPA -> "Revela todas las salas del piso."
             PedKind.REFUGIO -> "+30 de Luz. Una vez por piso."
             PedKind.ESCALERA -> "Bajar más hondo en el faro."
             PedKind.FIN -> "Terminar el bioma."
+            PedKind.VIGILIA -> "Recupera Luz antes del jefe: más cuanto menos te quede. Una vez."
+            PedKind.ARMA -> lockedText?.let { "Bloqueada: $it." } ?: (weapon!!.desc + if (selected) " Equipada." else "")
+            PedKind.INICIAL -> "Empieza la run con este exvoto. ${exvoto!!.desc}" + if (selected) " Elegido." else ""
+            PedKind.META -> lockedText?.let { "$metaDetail Bloqueado: $it." } ?: metaDetail
+            PedKind.DESCENSO -> "Empieza una run nueva."
         }
 }
 
 class Projectile(
     var x: Float, var y: Float, val vx: Float, val vy: Float,
     val r: Float, val dmg: Float, var life: Float, val color: Color,
+    val cause: String = "Un proyectil",
 ) {
     var px = x
     var py = y
@@ -50,11 +81,23 @@ class Puddle(val x: Float, val y: Float, var t: Float) { val r = 11f }
 class FireZone(val x: Float, val y: Float, var t: Float) { val r = 9f }
 class Statue(val x: Float, val y: Float, var t: Float)
 
+/** El Arpón de Isla: vuela, perfora, se clava y vuelve solo o al recogerlo. */
+class Harpoon(var x: Float, var y: Float, val dx: Float, val dy: Float, val pierce: Int, val returnTime: Float) {
+    enum class St { FLYING, STUCK, RETURNING }
+    var st = St.FLYING
+    var px = x
+    var py = y
+    var traveled = 0f
+    var stuckT = 0f
+    var hits = 0
+    val hitSet = HashSet<Enemy>()
+}
+
 /**
  * Estadísticas de la run derivadas de los exvotos y mejoras.
  * Se recalcula cada vez que se consigue algo.
  */
-class Stats(owned: List<ExvotoDef>, val weaponLevel: Int) {
+class Stats(owned: List<ExvotoDef>, val weaponLevel: Int, val weapon: Weapon = Weapon.FAROL) {
     private val ids = owned.map { it.id }.toSet()
     private val tags = owned.groupingBy { it.tag }.eachCount()
     fun has(id: String) = id in ids
@@ -81,5 +124,6 @@ class Stats(owned: List<ExvotoDef>, val weaponLevel: Int) {
     val eye = has("ojo_farero")
     val twinLamp = has("lampara_gemela")
 
-    val weaponMul = 1f + 0.2f * weaponLevel
+    /** La mejora del Farol es daño; las demás armas mejoran su rasgo propio (ver [Weapon.upgradeText]). */
+    val weaponMul = if (weapon == Weapon.FAROL) 1f + 0.2f * weaponLevel else 1f
 }

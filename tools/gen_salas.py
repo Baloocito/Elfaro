@@ -16,7 +16,7 @@ SRC = os.path.join(ROOT, "tools", "salas.txt")
 OUT = os.path.join(ROOT, "assets", "rooms")
 
 WALL, WATER, SPAWN, PEDESTAL = 1, 2, 3, 4
-SIZES = {"jefe": (30, 17)}
+SIZES = {"jefe": (30, 17), "grande_h": (52, 14), "grande_v": (26, 28)}
 DEFAULT = (26, 14)
 
 
@@ -64,15 +64,25 @@ def build(room):
 
 
 def door_tiles(cols, rows):
-    """Tiles de cada puerta + pasillo de 3 tiles hacia dentro (igual que Room.kt)."""
-    ry = (rows // 2 - 1, rows // 2)
-    cx = (cols // 2 - 1, cols // 2)
-    return {
-        "L": [(x, y) for y in ry for x in range(0, 4)],
-        "R": [(x, y) for y in ry for x in range(cols - 4, cols)],
-        "D": [(x, y) for x in cx for y in range(0, 4)],
-        "U": [(x, y) for x in cx for y in range(rows - 4, rows)],
-    }
+    """Tiles de cada puerta + pasillo de 3 tiles hacia dentro (igual que Room.kt).
+    Las salas grandes tienen una puerta por subcelda en cada lado exterior."""
+    nx = 2 if cols >= 52 else 1
+    ny = 2 if rows >= 28 else 1
+    sc, sr = cols // nx, rows // ny
+    out = {}
+    for sx in range(nx):
+        for sy in range(ny):
+            ry = (sy * sr + sr // 2 - 1, sy * sr + sr // 2)
+            cx = (sx * sc + sc // 2 - 1, sx * sc + sc // 2)
+            if sx == 0:
+                out[f"L{sy}"] = [(x, y) for y in ry for x in range(0, 4)]
+            if sx == nx - 1:
+                out[f"R{sy}"] = [(x, y) for y in ry for x in range(cols - 4, cols)]
+            if sy == 0:
+                out[f"D{sx}"] = [(x, y) for x in cx for y in range(0, 4)]
+            if sy == ny - 1:
+                out[f"U{sx}"] = [(x, y) for x in cx for y in range(rows - 4, rows)]
+    return out
 
 
 def validate(cols, rows, terrain, marks):
@@ -81,7 +91,7 @@ def validate(cols, rows, terrain, marks):
     for tiles in doors.values():
         for x, y in tiles:
             t[y][x] = 0
-    start = doors["L"][0]
+    start = doors["L0"][0]
     seen = {start}
     q = deque([start])
     while q:
