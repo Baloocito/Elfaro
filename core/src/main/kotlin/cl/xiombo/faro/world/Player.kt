@@ -2,6 +2,7 @@ package cl.xiombo.faro.world
 
 import cl.xiombo.faro.data.Balance
 import cl.xiombo.faro.data.Pal
+import cl.xiombo.faro.data.Weapon
 import cl.xiombo.faro.input.InputState
 import cl.xiombo.faro.util.approach
 import cl.xiombo.faro.util.len
@@ -18,6 +19,10 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
 
     var luzMax = Balance.LUZ_MAX
     var luz = Balance.LUZ_MAX
+    var weapon = Weapon.FAROL
+    /** El Arpón en vuelo, clavado o volviendo (null = en la mano). */
+    var harpoon: Harpoon? = null
+        private set
 
     var vx = 0f
     var vy = 0f
@@ -65,9 +70,18 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
     val invulnerable get() = dashIframes > 0f || hurtIframes > 0f || fallT > 0f
     val attacking get() = atkFrame >= 0
     val falling get() = fallT > 0f
-    val swingActive get() = atkFrame >= Balance.FAROL_STARTUP && atkFrame < Balance.FAROL_STARTUP + Balance.FAROL_ACTIVE
-    val swingSmear get() = atkFrame >= Balance.FAROL_STARTUP + Balance.FAROL_ACTIVE && atkFrame < Balance.FAROL_STARTUP + Balance.FAROL_ACTIVE + 2
-    val swingRange get() = Balance.FAROL_RANGE + if (swingIsThird) 4f else 0f
+    val swingActive get() = atkFrame >= weapon.startup && atkFrame < weapon.startup + weapon.active
+    val swingSmear get() = atkFrame >= weapon.startup + weapon.active && atkFrame < weapon.startup + weapon.active + 2
+    /** Alcance del arma actual (para golpear y para dibujar el golpe). */
+    var weaponLevel = 0
+    val swingRange: Float
+        get() = when (weapon) {
+            Weapon.FAROL -> Balance.FAROL_RANGE + if (swingIsThird) 4f else 0f
+            Weapon.ANCLA -> 34f
+            Weapon.CAMPANA -> 48f + 8f * weaponLevel
+            Weapon.ARPON -> 0f
+        }
+    val swingHalfAngleDeg get() = if (weapon == Weapon.ANCLA) 90f else Balance.FAROL_HALF_ANGLE_DEG
 
     fun hurtOverlaps(ox: Float, oy: Float, r: Float): Boolean {
         if (falling) return false
@@ -84,6 +98,7 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
         safeX = px; safeY = py
         vx = 0f; vy = 0f; kbX = 0f; kbY = 0f
         dashT = 0f; hazT = 0f; atkFrame = -1; fallT = 0f; coyote = 0f
+        harpoon = null
         snapshot()
     }
 
@@ -93,6 +108,8 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
         hurtIframes -= dt
         kbX = approach(kbX, 0f, 900f * dt)
         kbY = approach(kbY, 0f, 900f * dt)
+        weaponLevel = st.weaponLevel
+        updateHarpoon(w, dt)
         if (dashCharges < st.dashCharges) {
             dashRecharge -= dt
             if (dashRecharge <= 0f) {
@@ -144,7 +161,7 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
         }
 
         // Haz: cuesta Luz; no se puede usar si deja la Luz en 0. También cancela la recuperación del Farol.
-        val inRecovery = atkFrame >= Balance.FAROL_STARTUP + Balance.FAROL_ACTIVE
+        val inRecovery = atkFrame >= weapon.startup + weapon.active
         if (inp.hazBuf > 0f && hazT <= 0f && (!attacking || inRecovery)) {
             inp.hazBuf = 0f
             atkFrame = -1
@@ -167,7 +184,7 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
         if (!attacking && hazT <= 0f) {
             comboTimer -= dt
             if (comboTimer <= 0f) comboIdx = 0
-            if (inp.attackBuf > 0f) {
+            if (inp.attackBuf > 0f && canAttack()) {
                 inp.attackBuf = 0f
                 startSwing()
             }
@@ -176,7 +193,7 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
 
         // Movimiento con aceleración y frenado
         var max = Balance.SPEED
-        if (attacking) max *= Balance.ATTACK_MOVE_FACTOR else if (hazT <= 0f) max *= st.windSpeed
+        if (attacking) max *= weapon.moveFactor else if (hazT <= 0f) max *= st.windSpeed
         if (hazT > 0f) max *= Balance.HAZ_MOVE_FACTOR
         if (w.playerInPuddle()) max *= 0.6f
         val rate = (if (moving) Balance.ACCEL else Balance.DECEL) * dt
@@ -235,42 +252,77 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
         }
     }
 
+    /** El Arpón solo se lanza si está en la mano. */
+    private fun canAttack() = weapon != Weapon.ARPON || harpoon == null
+
     private fun startSwing() {
         atkFrame = 0
         atkDx = aimX
         atkDy = aimY
-        swingIsThird = comboIdx == 2
+        swingIsThird = weapon == Weapon.FAROL && comboIdx == 2
         swingHits.clear()
     }
 
     private fun updateSwing(w: World, inp: InputState) {
-        if (atkFrame < Balance.FAROL_STARTUP) w.room.move(this, atkDx * 0.6f, atkDy * 0.6f)
-        if (swingActive) hitCone(w)
+        if (atkFrame < weapon.startup && (weapon == Weapon.FAROL || weapon == Weapon.ANCLA)) {
+            w.room.move(this, atkDx * 0.6f, atkDy * 0.6f)
+        }
+        if (swingActive) {
+            val first = atkFrame == weapon.startup
+            when (weapon) {
+                Weapon.FAROL, Weapon.ANCLA -> hitCone(w)
+                Weapon.CAMPANA -> if (first) bellPulse(w)
+                Weapon.ARPON -> if (first) throwHarpoon(w)
+            }
+        }
         atkFrame++
-        if (atkFrame >= Balance.FAROL_TOTAL) {
+        if (atkFrame >= weapon.total) {
             atkFrame = -1
-            comboIdx = (comboIdx + 1) % 3
+            comboIdx = if (weapon == Weapon.FAROL) (comboIdx + 1) % 3 else 0
             comboTimer = Balance.COMBO_WINDOW
-            if (inp.attackBuf > 0f) {
+            if (inp.attackBuf > 0f && canAttack()) {
                 inp.attackBuf = 0f
                 startSwing()
             }
         }
     }
 
-    /** Daño del Farol contra un enemigo concreto, con todos los modificadores de exvotos. */
-    private fun meleeDamage(w: World, e: Enemy): Float {
+    /** Daño del arma contra un enemigo concreto, con todos los modificadores de exvotos. */
+    private fun weaponDamage(w: World, e: Enemy, base: Float): Float {
         val st = w.stats
-        var d = Balance.FAROL_DMG * st.weaponMul
+        var d = base
         if (!e.hitByPlayer) d += st.firstHitBonus
         if (e.slowed) d *= st.slowedBonus
         if (e.isElite || e.isBoss) d *= st.eliteBonus
         return d
     }
 
-    private fun hitCone(w: World) {
+    private fun baseDamage(w: World): Float = when (weapon) {
+        Weapon.FAROL -> Balance.FAROL_DMG * w.stats.weaponMul
+        Weapon.ARPON -> 14f
+        Weapon.ANCLA -> 22f
+        Weapon.CAMPANA -> 10f
+    }
+
+    /** Efectos comunes al golpear: conjuntos de exvotos, remate, hit-stop y chispas. */
+    private fun onHit(w: World, e: Enemy) {
         val st = w.stats
-        val cosHalf = cos(Math.toRadians(Balance.FAROL_HALF_ANGLE_DEG.toDouble())).toFloat()
+        e.hitByPlayer = true
+        if (swingIsThird) e.burn(st.burnTime)
+        if (swingIsThird && st.thirdHitSlow) e.slow(0.7f, 1.5f)
+        if (st.setSal) e.slow(0.8f, 1f)
+        // Conjunto Hueso: remata a lo que queda por debajo del 15 %.
+        if (st.setHueso && !e.isBoss && !e.killed && e.hp < e.maxHp * 0.15f) {
+            e.takeHit(w, e.hp + 1f, cx, cy, HitKind.SLAM)
+            w.fx.floater("REMATE", e.x, e.y + 14f, Pal.SHELL)
+        }
+        w.hitstop(if (weapon == Weapon.ANCLA) 4 else Balance.HITSTOP_HIT)
+        w.fx.burst(e.x, e.y, 4, Pal.LAMP_HI, 80f, 0.2f)
+    }
+
+    /** Farol (cono de 60°) y Ancla (arco de 180°). */
+    private fun hitCone(w: World) {
+        val cosHalf = cos(Math.toRadians(swingHalfAngleDeg.toDouble())).toFloat()
         val range = swingRange
         for (e in w.enemies) {
             if (!e.targetable || e in swingHits) continue
@@ -281,20 +333,94 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
             // Tolerancia según el tamaño del enemigo: favorece al jugador.
             if (d > 6f && (dx * atkDx + dy * atkDy) / d < cosHalf - e.radius / d) continue
             swingHits += e
-            val dmg = meleeDamage(w, e)
-            if (e.takeHit(w, dmg, cx, cy, HitKind.MELEE)) {
-                e.hitByPlayer = true
-                e.knock(atkDx, atkDy, if (swingIsThird) 150f else 80f)
-                if (swingIsThird) e.burn(st.burnTime)
-                if (swingIsThird && st.thirdHitSlow) e.slow(0.7f, 1.5f)
-                if (st.setSal) e.slow(0.8f, 1f)
-                // Conjunto Hueso: remata a lo que queda por debajo del 15 %.
-                if (st.setHueso && !e.isBoss && !e.killed && e.hp < e.maxHp * 0.15f) {
-                    e.takeHit(w, e.hp + 1f, cx, cy, HitKind.SLAM)
-                    w.fx.floater("REMATE", e.x, e.y + 14f, Pal.SHELL)
+            if (e.takeHit(w, weaponDamage(w, e, baseDamage(w)), cx, cy, HitKind.MELEE)) {
+                if (weapon == Weapon.ANCLA) {
+                    // Empuja ~40 px (+10 por mejora) y aturde si choca contra una pared.
+                    val push = 240f + 28f * weaponLevel
+                    val l = if (d > 0.5f) d else 1f
+                    e.knock(dx / l, dy / l, push, 0.8f + 0.2f * weaponLevel)
+                    w.addShake(2f)
+                } else {
+                    e.knock(atkDx, atkDy, if (swingIsThird) 150f else 80f)
                 }
-                w.hitstop(Balance.HITSTOP_HIT)
-                w.fx.burst(e.x, e.y, 4, Pal.LAMP_HI, 80f, 0.2f)
+                onHit(w, e)
+            }
+        }
+    }
+
+    /** Campana: pulso alrededor de Isla que daña, aturde y abre paredes agrietadas. */
+    private fun bellPulse(w: World) {
+        val r = swingRange
+        w.fx.ring(cx, cy, r, Pal.SHELL)
+        w.fx.ring(cx, cy, r * 0.6f, Pal.CREAM)
+        for (e in w.enemies) {
+            if (!e.targetable) continue
+            val d = sqrt((e.x - cx) * (e.x - cx) + (e.y - cy) * (e.y - cy))
+            if (d - e.radius > r) continue
+            if (e.takeHit(w, weaponDamage(w, e, baseDamage(w)), cx, cy, HitKind.BLAST)) {
+                e.stun(0.6f)
+                onHit(w, e)
+            }
+        }
+        w.addShake(1f)
+        w.bellAt(cx, cy, r)
+    }
+
+    private fun throwHarpoon(w: World) {
+        harpoon = Harpoon(cx + atkDx * 6f, cy + atkDy * 6f, atkDx, atkDy, 2 + weaponLevel, 1.5f - 0.3f * weaponLevel)
+        w.fx.burst(cx + atkDx * 8f, cy + atkDy * 8f, 3, Pal.CREAM, 60f, 0.15f)
+    }
+
+    /** Vuela a 220 px/s y perfora; al chocar o al agotar la perforación se clava. Vuelve solo o se recoge. */
+    private fun updateHarpoon(w: World, dt: Float) {
+        val h = harpoon ?: return
+        h.px = h.x; h.py = h.y
+        when (h.st) {
+            Harpoon.St.FLYING -> {
+                val step = HARPOON_SPEED * dt
+                h.x += h.dx * step
+                h.y += h.dy * step
+                h.traveled += step
+                if (w.room.isSolidAt(h.x, h.y) || h.traveled > HARPOON_RANGE) {
+                    if (w.room.isSolidAt(h.x, h.y)) { h.x -= h.dx * step; h.y -= h.dy * step }
+                    h.st = Harpoon.St.STUCK
+                    w.fx.spark(h.x, h.y)
+                    return
+                }
+                for (e in w.enemies) {
+                    if (!e.targetable || e in h.hitSet) continue
+                    if ((e.x - h.x) * (e.x - h.x) + (e.y - h.y) * (e.y - h.y) > (e.radius + 4f) * (e.radius + 4f)) continue
+                    h.hitSet += e
+                    if (e.takeHit(w, weaponDamage(w, e, 14f), h.x - h.dx * 10f, h.y - h.dy * 10f, HitKind.MELEE)) {
+                        e.knock(h.dx, h.dy, 60f)
+                        onHit(w, e)
+                        h.hits++
+                        if (h.hits >= h.pierce) { h.st = Harpoon.St.STUCK; return }
+                    } else {
+                        h.st = Harpoon.St.STUCK   // rebotó en un caparazón
+                        return
+                    }
+                }
+            }
+            Harpoon.St.STUCK -> {
+                h.stuckT += dt
+                if ((cx - h.x) * (cx - h.x) + (cy - h.y) * (cy - h.y) < 16f * 16f) { harpoon = null; return }
+                if (h.stuckT >= h.returnTime) { h.st = Harpoon.St.RETURNING; h.hitSet.clear() }
+            }
+            Harpoon.St.RETURNING -> {
+                val dx = cx - h.x
+                val dy = cy - h.y
+                val d = sqrt(dx * dx + dy * dy)
+                if (d < 10f) { harpoon = null; return }
+                val step = 320f * dt
+                h.x += dx / d * step
+                h.y += dy / d * step
+                for (e in w.enemies) {
+                    if (!e.targetable || e in h.hitSet) continue
+                    if ((e.x - h.x) * (e.x - h.x) + (e.y - h.y) * (e.y - h.y) > (e.radius + 4f) * (e.radius + 4f)) continue
+                    h.hitSet += e
+                    if (e.takeHit(w, weaponDamage(w, e, 7f), h.x, h.y, HitKind.LAMP)) onHit(w, e)
+                }
             }
         }
     }
@@ -332,6 +458,8 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
     fun refillDash(charges: Int) { dashCharges = max(dashCharges, charges) }
 
     companion object {
+        const val HARPOON_SPEED = 220f
+        const val HARPOON_RANGE = 190f
         const val COYOTE = 0.1f
         const val FALL_TIME = 0.45f
         const val FALL_DAMAGE = 10f

@@ -61,6 +61,13 @@ abstract class Enemy(val def: EnemyDef, x: Float, y: Float, val floor: Int, val 
     var kbX = 0f
     var kbY = 0f
     private var slamArmed = false
+    private var wallStun = 0f
+
+    /** Aturdido: no se mueve ni ataca y recibe +25 % de daño. Después, 2 s de inmunidad. */
+    var stunT = 0f
+        private set
+    private var stunImmuneT = 0f
+    val stunned get() = stunT > 0f
     var dirX = 1f
     var dirY = 0f
     var anim = MathUtils.random(10f)
@@ -87,6 +94,11 @@ abstract class Enemy(val def: EnemyDef, x: Float, y: Float, val floor: Int, val 
         anim += dt
         flash -= dt
         slowT -= dt
+        stunImmuneT -= dt
+        if (stunT > 0f) {
+            stunT -= dt
+            if (stunT <= 0f) stunImmuneT = 2f
+        }
         if (burnT > 0f && !killed) {
             burnT -= dt
             takeHit(w, Balance.BURN_DPS * dt, x, y, HitKind.BURN)
@@ -94,6 +106,11 @@ abstract class Enemy(val def: EnemyDef, x: Float, y: Float, val floor: Int, val 
         }
         if (kbX != 0f || kbY != 0f) {
             val hit = w.room.move(this, kbX * dt, kbY * dt)
+            if (hit && wallStun > 0f && !killed) {
+                stun(wallStun)
+                wallStun = 0f
+                w.fx.spark(x, y)
+            }
             if (hit && slamArmed && w.stats.wallSlam && !killed) {
                 slamArmed = false
                 takeHit(w, 25f, x, y, HitKind.SLAM)
@@ -111,14 +128,15 @@ abstract class Enemy(val def: EnemyDef, x: Float, y: Float, val floor: Int, val 
                 w.addPuddle(x, y - hh + 2f)
             }
         }
-        if (!dead) think(w, dt)
+        // Aturdido no piensa; la Medusa que ya murió sí sigue su cuenta atrás para explotar.
+        if (!dead && (!stunned || killed)) think(w, dt)
     }
 
     protected abstract fun think(w: World, dt: Float)
 
     open fun takeHit(w: World, amount: Float, fromX: Float, fromY: Float, kind: HitKind): Boolean {
         if (!targetable) return false
-        hp -= amount
+        hp -= if (stunned) amount * 1.25f else amount
         when (kind) {
             HitKind.MELEE, HitKind.BLAST, HitKind.SLAM, HitKind.LAMP -> flash = 0.1f
             HitKind.HAZ -> flash = 0.03f
@@ -139,11 +157,21 @@ abstract class Enemy(val def: EnemyDef, x: Float, y: Float, val floor: Int, val 
 
     protected open fun onKilled(w: World) { dead = true }
 
-    fun knock(dx: Float, dy: Float, force: Float) {
+    /** Empuje. Con [stunOnWall] > 0 queda aturdido si choca contra una pared (Ancla). */
+    fun knock(dx: Float, dy: Float, force: Float, stunOnWall: Float = 0f) {
         if (isBoss) return
         kbX = dx * force
         kbY = dy * force
         slamArmed = true
+        wallStun = stunOnWall
+    }
+
+    /** Aturde [t] segundos (los jefes, la mitad). No se encadena: 2 s de inmunidad al terminar. */
+    fun stun(t: Float) {
+        if (killed || stunImmuneT > 0f || !targetable) return
+        val d = if (isBoss) t * 0.5f else t
+        if (d > stunT) stunT = d
+        if (state == EState.TELEGRAPH || state == EState.ATTACK) { state = EState.RECOVER; stateT = 0.3f }
     }
 
     fun burn(t: Float) { burnT = max(burnT, t) }
@@ -180,7 +208,7 @@ class Ahogado(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) : En
             }
             EState.ATTACK -> {
                 w.room.move(this, dirX * LUNGE_SPEED * dt, dirY * LUNGE_SPEED * dt)
-                if (!hitDone && p.hurtOverlaps(x, y, radius) && w.hurtPlayer(dmg, x, y, this)) hitDone = true
+                if (!hitDone && p.hurtOverlaps(x, y, radius) && w.hurtPlayer(dmg, x, y, this, "Embestida")) hitDone = true
                 stateT -= dt
                 if (stateT <= 0f) { state = EState.RECOVER; stateT = 0.45f }
             }
@@ -236,7 +264,7 @@ class Medusa(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) : Ene
             EState.TELEGRAPH -> {
                 stateT -= dt
                 if (stateT <= 0f) {
-                    if (p.hurtOverlaps(x, y, PULSE_R)) w.hurtPlayer(dmg, x, y, this)
+                    if (p.hurtOverlaps(x, y, PULSE_R)) w.hurtPlayer(dmg, x, y, this, "Pulso")
                     w.fx.ring(x, y, PULSE_R, Pal.MEDUSA)
                     w.fx.burst(x, y, 8, Pal.MEDUSA, 90f, 0.25f)
                     state = EState.RECOVER
@@ -259,7 +287,7 @@ class Medusa(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) : Ene
     private fun explode(w: World) {
         dead = true
         val p = w.player
-        if (p.hurtOverlaps(x, y, BLAST_R)) w.hurtPlayer(dmg * 1.5f, x, y, null)
+        if (p.hurtOverlaps(x, y, BLAST_R)) w.hurtPlayer(dmg * 1.5f, x, y, this, "Explosión al morir")
         for (o in w.enemies) {
             if (o === this || !o.targetable) continue
             if (dist(x, y, o.x, o.y) <= BLAST_R + o.radius) o.takeHit(w, BLAST_DMG, x, y, HitKind.BLAST)
@@ -312,7 +340,7 @@ class Cangrejo(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) : E
                 if (stateT <= 0f) { state = EState.ATTACK; stateT = 0.12f; hitDone = false }
             }
             EState.ATTACK -> {
-                if (!hitDone && p.hurtOverlaps(x + fx * 14f, y + fy * 14f, 12f) && w.hurtPlayer(dmg, x, y, this)) hitDone = true
+                if (!hitDone && p.hurtOverlaps(x + fx * 14f, y + fy * 14f, 12f) && w.hurtPlayer(dmg, x, y, this, "Pinza")) hitDone = true
                 stateT -= dt
                 if (stateT <= 0f) { state = EState.RECOVER; stateT = 0.6f }
             }
@@ -325,7 +353,7 @@ class Cangrejo(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) : E
     }
 
     override fun takeHit(w: World, amount: Float, fromX: Float, fromY: Float, kind: HitKind): Boolean {
-        if (kind == HitKind.MELEE && targetable) {
+        if (kind == HitKind.MELEE && targetable && !stunned) {
             val dx = fromX - x
             val dy = fromY - y
             val d = max(0.001f, sqrt(dx * dx + dy * dy))
@@ -443,7 +471,7 @@ class Sirena(def: EnemyDef, x: Float, y: Float) : Enemy(def, x, y, 1, null) {
                 x = bubbleX
                 y = bubbleY
                 snapshot()
-                if (p.hurtOverlaps(x, y, EMERGE_R)) w.hurtPlayer(dmg * 1.6f, x, y, this)
+                if (p.hurtOverlaps(x, y, EMERGE_R)) w.hurtPlayer(dmg * 1.6f, x, y, this, "Emergió bajo ti")
                 w.fx.ring(x, y, EMERGE_R, Pal.CORAL)
                 w.fx.burst(x, y, 16, Pal.BREA, 130f, 0.5f)
                 w.fx.burst(x, y, 8, Pal.FOAM, 100f, 0.4f)

@@ -33,5 +33,18 @@
   ],
   "jefe": [
     "jefe_sirena.tmx"
+  ],
+  "santuario": [
+    "santuario_faro.tmx"
+  ],
+  "antesala": [
+    "antesala_vigilia.tmx"
+  ],
+  "grande_h": [
+    "grande_h_nave.tmx",
+    "grande_h_dique.tmx"
+  ],
+  "grande_v": [
+    "grande_v_torre.tmx"
   ]
 }

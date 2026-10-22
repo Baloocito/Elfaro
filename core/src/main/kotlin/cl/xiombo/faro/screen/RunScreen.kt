@@ -4,6 +4,7 @@ import cl.xiombo.faro.data.Balance
 import cl.xiombo.faro.input.Bindings
 import cl.xiombo.faro.input.Controls
 import cl.xiombo.faro.input.Gamepad
+import cl.xiombo.faro.data.RunSave
 import cl.xiombo.faro.input.VirtualController
 import cl.xiombo.faro.render.Renderer
 import cl.xiombo.faro.world.World
@@ -20,7 +21,8 @@ class RunScreen : KtxScreen {
     private val controls = Controls(renderer)
     private val pad = Gamepad()
     private val menu = PauseMenu()
-    private var world = World(System.nanoTime())
+    /** Si hay una run guardada, se continúa; si no, se empieza en el Santuario. */
+    private var world = RunSave.load()?.let { World.resume(it) } ?: World.sanctuary()
     private var lastHurt = 0
 
     override fun show() {
@@ -36,12 +38,13 @@ class RunScreen : KtxScreen {
         }
         pad.poll()
         controls.menuOpen = menu.open
+        menu.inRun = !world.inSanctuary && world.mode == World.Mode.PLAYING
 
         if (menu.open) {
             menu.update(pad, controls)
-            if (menu.restartRequested) {
-                menu.restartRequested = false
-                newWorld()
+            if (menu.abandonRequested) {
+                menu.abandonRequested = false
+                world.abandon()
             }
             acc = 0f
         } else {
@@ -54,7 +57,11 @@ class RunScreen : KtxScreen {
                 while (acc >= step) {
                     controls.poll(world, pad)
                     world.update(step, controls.state)  // lógica determinista a 60 Hz
-                    if (world.restartRequested) newWorld()
+                    when (world.next) {
+                        World.Next.NEW_RUN -> newWorld(World.newRun())
+                        World.Next.SANCTUARY -> newWorld(World.sanctuary())
+                        World.Next.NONE -> {}
+                    }
                     acc -= step
                 }
             }
@@ -70,14 +77,15 @@ class RunScreen : KtxScreen {
         renderer.render(world, acc / step, controls, menu, pad)
     }
 
-    private fun newWorld() {
-        world = World(System.nanoTime())
+    private fun newWorld(w: World) {
+        world = w
         lastHurt = 0
     }
 
-    /** Al salir de la app (llamada, notificación…) el juego queda en pausa. */
+    /** Al salir de la app (llamada, notificación…) el juego queda en pausa y la run se guarda. */
     override fun pause() {
         menu.openMenu()
+        world.saveRun()
     }
 
     override fun dispose() {

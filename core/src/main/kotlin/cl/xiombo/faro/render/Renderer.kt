@@ -1,6 +1,9 @@
 package cl.xiombo.faro.render
 
 import cl.xiombo.faro.data.Balance
+import cl.xiombo.faro.data.Meta
+import cl.xiombo.faro.data.Weapon
+import cl.xiombo.faro.world.Harpoon
 import cl.xiombo.faro.data.Pal
 import cl.xiombo.faro.data.Tag
 import cl.xiombo.faro.input.Action
@@ -453,7 +456,7 @@ class Renderer : Disposable {
             col(if (flick == 0) Pal.LAMP else Pal.LAMP_DIM, min(1f, f.t))
             shapes.rect(f.x - 2f, f.y - 1f + flick, 4f, 4f)
         }
-        for (p in w.cell.pedestals) if (!p.taken || p.kind == PedKind.REFUGIO) drawPedestal(w, p)
+        for (p in w.cell.pedestals) if (!p.taken || p.kind == PedKind.REFUGIO || p.kind == PedKind.VIGILIA || p.kind == PedKind.META) drawPedestal(w, p)
         for (s in w.pending) {
             val pulse = ((w.time * 10f).toInt() % 2 == 0)
             col(if (pulse) (s.affix?.color ?: Pal.CORAL) else Pal.WATER, 0.8f)
@@ -633,6 +636,59 @@ class Renderer : Disposable {
                 shapes.rect(x - 2f, y - 4f, 4f, 40f)
                 outlined(x - 6f, y - 6f, 12f, 4f, Pal.WALL_TOP)
             }
+            PedKind.VIGILIA -> {
+                // Farol alto de la antesala: brilla hasta que se usa.
+                outlined(x - 5f, y - 5f, 10f, 4f, Pal.WALL_TOP)
+                outlined(x - 1f, y - 1f, 2f, 18f, Pal.WALL)
+                outlined(x - 6f, y + 17f, 12f, 12f, if (p.taken) Pal.SEAM else Pal.LAMP)
+                if (!p.taken) {
+                    col(if (bob > 0f) Pal.CREAM else Pal.LAMP_HI)
+                    shapes.rect(x - 3f, y + 20f, 6f, 6f)
+                }
+            }
+            PedKind.DESCENSO -> {
+                // Pozo de descenso del Santuario.
+                col(Pal.OUTLINE)
+                shapes.ellipse(x - 15f, y - 9f, 30f, 18f)
+                col(Pal.VOID)
+                shapes.ellipse(x - 13f, y - 7f, 26f, 14f)
+                col(Pal.TIDE, 0.6f + 0.3f * bob)
+                shapes.ellipse(x - 8f, y - 4f, 16f, 8f)
+            }
+            PedKind.ARMA -> {
+                val locked = p.lockedText != null
+                if (p.selected) {
+                    col(Pal.LAMP, 0.5f)
+                    shapes.rect(x - 9f, y - 9f, 18f, 24f)
+                }
+                outlined(x - 6f, y - 6f, 12f, 8f, Pal.WALL_TOP)
+                val wc = if (locked) Pal.SEAM else weaponColor(p.weapon!!)
+                drawWeaponIcon(p.weapon!!, x, y + 7f + if (locked) 0f else bob, wc)
+            }
+            PedKind.META -> {
+                outlined(x - 6f, y - 6f, 12f, 8f, if (p.taken) Pal.LAMP_DIM else Pal.WALL_TOP)
+                val c = when {
+                    p.taken -> Pal.LAMP
+                    p.lockedText != null -> Pal.SEAM
+                    else -> Pal.SHELL
+                }
+                col(Pal.OUTLINE)
+                shapes.circle(x, y + 7f + bob, 4f, 10)
+                col(c)
+                shapes.circle(x, y + 7f + bob, 3f, 10)
+                col(Pal.CREAM, 0.8f)
+                shapes.rect(x - 1f, y + 8f + bob, 1f, 1f)
+            }
+            PedKind.INICIAL -> {
+                if (p.selected) {
+                    col(Pal.FOAM, 0.5f)
+                    shapes.rect(x - 9f, y - 9f, 18f, 24f)
+                }
+                outlined(x - 6f, y - 6f, 12f, 8f, Pal.WALL_TOP)
+                outlined(x - 3f, y + 4f + bob, 6f, 6f, p.exvoto!!.rarity.color)
+                col(p.exvoto!!.tag.color)
+                shapes.rect(x - 2f, y + 5f + bob, 4f, 4f)
+            }
             else -> {
                 outlined(x - 6f, y - 6f, 12f, 8f, Pal.WALL_TOP)
                 col(Pal.WALL)
@@ -650,6 +706,45 @@ class Renderer : Disposable {
                 outlined(x - 3f, y + 4f + bob, 6f, 6f, frame)
                 col(c)
                 shapes.rect(x - 2f, y + 5f + bob, 4f, 4f)
+            }
+        }
+    }
+
+    private fun weaponColor(wp: Weapon): Color = when (wp) {
+        Weapon.FAROL -> Pal.LAMP
+        Weapon.ARPON -> Pal.CREAM
+        Weapon.ANCLA -> Pal.WALL_TOP
+        Weapon.CAMPANA -> Pal.SHELL
+    }
+
+    /** Icono simple de cada arma (pedestales del Santuario y mano de Isla). */
+    private fun drawWeaponIcon(wp: Weapon, x: Float, y: Float, c: Color) {
+        when (wp) {
+            Weapon.FAROL -> {
+                outlined(x - 3f, y - 3f, 6f, 6f, c)
+                col(Pal.LAMP_HI)
+                shapes.rect(x - 1f, y - 1f, 2f, 2f)
+            }
+            Weapon.ARPON -> {
+                col(Pal.OUTLINE)
+                shapes.rect(x - 1f, y - 6f, 3f, 12f)
+                col(c)
+                shapes.rect(x, y - 5f, 1f, 10f)
+                shapes.triangle(x - 2f, y + 4f, x + 3f, y + 4f, x + 0.5f, y + 8f)
+            }
+            Weapon.ANCLA -> {
+                outlined(x - 1f, y - 2f, 2f, 9f, c)
+                outlined(x - 5f, y - 4f, 10f, 2f, c)
+                outlined(x - 5f, y - 3f, 2f, 3f, c)
+                outlined(x + 3f, y - 3f, 2f, 3f, c)
+            }
+            Weapon.CAMPANA -> {
+                col(Pal.OUTLINE)
+                shapes.triangle(x - 6f, y - 4f, x + 6f, y - 4f, x, y + 6f)
+                col(c)
+                shapes.triangle(x - 5f, y - 3f, x + 5f, y - 3f, x, y + 5f)
+                col(Pal.LAMP_DIM)
+                shapes.rect(x - 1f, y - 5f, 2f, 2f)
             }
         }
     }
@@ -675,17 +770,41 @@ class Renderer : Disposable {
             col(Pal.OUTLINE)
             if (p.aimX >= 0f) shapes.rect(x + 1f, y + 11f, 1f, 1f) else shapes.rect(x - 2f, y + 11f, 1f, 1f)
         }
-        // Farol (siempre visible: es la vida)
+        // Farol (siempre visible: es la vida). Con otra arma, el farol cuelga del cinto.
         val lx = (x + p.aimX * 8f).roundToInt().toFloat()
         val ly = (y + 5f + p.aimY * 5f).roundToInt().toFloat()
-        outlined(lx - 2f, ly - 2f, 4f, 4f, if (w.gameOver) Pal.SEAM else Pal.LAMP)
+        if (p.weapon == Weapon.FAROL || w.gameOver) {
+            outlined(lx - 2f, ly - 2f, 4f, 4f, if (w.gameOver) Pal.SEAM else Pal.LAMP)
+        } else {
+            outlined(x - (if (p.aimX >= 0f) 7f else -4f), y + 1f, 3f, 3f, Pal.LAMP)
+            if (p.weapon != Weapon.ARPON || p.harpoon == null) drawWeaponIcon(p.weapon, lx, ly + 1f, weaponColor(p.weapon))
+        }
     }
 
     private fun drawAttacks(p: Player) {
-        if (p.swingActive || p.swingSmear) {
+        if ((p.swingActive || p.swingSmear) && (p.weapon == Weapon.FAROL || p.weapon == Weapon.ANCLA)) {
             val ang = atan2(p.atkDy, p.atkDx) * MathUtils.radiansToDegrees
-            if (p.swingActive) col(Pal.LAMP_HI, 0.85f) else col(Pal.LAMP_DIM, 0.45f)
-            shapes.arc(p.cx, p.cy, p.swingRange, ang - Balance.FAROL_HALF_ANGLE_DEG, Balance.FAROL_HALF_ANGLE_DEG * 2f, 10)
+            val half = p.swingHalfAngleDeg
+            if (p.weapon == Weapon.ANCLA) {
+                if (p.swingActive) col(Pal.CREAM, 0.8f) else col(Pal.WALL_TOP, 0.5f)
+            } else {
+                if (p.swingActive) col(Pal.LAMP_HI, 0.85f) else col(Pal.LAMP_DIM, 0.45f)
+            }
+            shapes.arc(p.cx, p.cy, p.swingRange, ang - half, half * 2f, if (p.weapon == Weapon.ANCLA) 16 else 10)
+        }
+        val h = p.harpoon
+        if (h != null) {
+            // Cuerda, asta y punta del Arpón.
+            col(Pal.SHELL, 0.5f)
+            shapes.rectLine(p.cx, p.cy, h.x, h.y, 1f)
+            val tx = if (h.st == Harpoon.St.RETURNING) -h.dx else h.dx
+            val ty = if (h.st == Harpoon.St.RETURNING) -h.dy else h.dy
+            col(Pal.OUTLINE)
+            shapes.rectLine(h.x - h.dx * 11f, h.y - h.dy * 11f, h.x + h.dx * 1f, h.y + h.dy * 1f, 3f)
+            col(Pal.CREAM)
+            shapes.rectLine(h.x - h.dx * 10f, h.y - h.dy * 10f, h.x, h.y, 1.5f)
+            col(if (h.st == Harpoon.St.STUCK) Pal.LAMP else Pal.LAMP_HI)
+            shapes.rect(h.x - 1.5f + tx, h.y - 1.5f + ty, 3f, 3f)
         }
         if (p.hazT > 0f) {
             val ex = p.cx + p.aimX * p.hazLen
@@ -773,6 +892,13 @@ class Renderer : Disposable {
             }
         }
 
+        if (e.stunned) {
+            // Aturdido: dos estrellas que giran sobre la cabeza.
+            val t = w.time * 6f
+            col(Pal.LAMP_HI)
+            shapes.rect(x + cos(t) * 6f - 1f, y + e.hh + 7f + sin(t) * 2f, 2f, 2f)
+            shapes.rect(x - cos(t) * 6f - 1f, y + e.hh + 7f - sin(t) * 2f, 2f, 2f)
+        }
         if (e.burnT > 0f && blink) {
             col(Pal.LAMP_DIM)
             shapes.rect(x - 1f, y + e.hh + 2f, 2f, 2f)
@@ -872,6 +998,8 @@ class Renderer : Disposable {
                 PedKind.REFUGIO -> light(ped.x, ped.y + 18f, if (ped.taken) 40f else 70f, 0.9f)
                 PedKind.FIN -> light(ped.x, ped.y + 12f, 80f, 1f)
                 PedKind.ESCALERA -> light(ped.x, ped.y, 30f, 0.5f)
+                PedKind.VIGILIA -> light(ped.x, ped.y + 22f, if (ped.taken) 46f else 84f, 1f)
+                PedKind.DESCENSO -> light(ped.x, ped.y, 46f, 0.8f)
                 else -> if (!ped.taken) light(ped.x, ped.y + 6f, 26f, 0.7f)
             }
         }
@@ -882,7 +1010,8 @@ class Renderer : Disposable {
                 t += 14f
             }
         }
-        if (p.swingActive) light(p.cx + p.atkDx * 18f, p.cy + p.atkDy * 18f, 26f, 0.5f)
+        if (p.swingActive && p.weapon == Weapon.FAROL) light(p.cx + p.atkDx * 18f, p.cy + p.atkDy * 18f, 26f, 0.5f)
+        p.harpoon?.let { light(it.x, it.y, 14f, 0.5f) }
         for (b in w.fx.blasts) light(b.x, b.y, b.r * 2.2f * (b.t / b.maxT), 1f)
 
         batch.end()
@@ -943,6 +1072,11 @@ class Renderer : Disposable {
             shapes.rect(0f, 0f, iw.toFloat(), ih.toFloat())
         }
 
+        if (w.inSanctuary) {
+            shapes.end()
+            return
+        }
+
         // Barra de Luz (1 px por punto de Luz máxima)
         val bx = 8f
         val by = ih - 14f
@@ -967,7 +1101,7 @@ class Renderer : Disposable {
             col(if (full) Pal.LAMP_HI else Pal.SEAM)
             shapes.rect(bx + i * 24f, by - 6f, 20f * k, 2f)
         }
-        // Mejoras del Farol
+        // Mejoras del arma
         for (i in 0 until w.weaponLevel) {
             col(Pal.CORAL)
             shapes.rect(bx + 52f + i * 5f, by - 7f, 3f, 4f)
@@ -985,8 +1119,17 @@ class Renderer : Disposable {
         drawBossBar(w)
 
         if (w.mode != World.Mode.PLAYING) {
-            col(Pal.OUTLINE, (w.modeT * 0.6f).coerceIn(0f, 0.7f))
+            val k = if (w.mode == World.Mode.DEAD) ((w.modeT - World.SLOWMO_TIME) * 0.8f).coerceIn(0f, 0.8f)
+            else (w.modeT * 0.6f).coerceIn(0f, 0.7f)
+            col(Pal.OUTLINE, k)
             shapes.rect(0f, 0f, iw.toFloat(), ih.toFloat())
+            if (w.mode == World.Mode.DEAD && w.modeT > World.SLOWMO_TIME) {
+                // Tarjeta de la muerte
+                col(Pal.NIGHT, 0.9f)
+                shapes.rect(70f, 70f, iw - 140f, 130f)
+                col(Pal.CORAL)
+                shapes.rect(70f, 198f, iw - 140f, 2f)
+            }
         }
         shapes.end()
     }
@@ -1003,7 +1146,13 @@ class Renderer : Disposable {
             if (!c.known) continue
             val x = x0 + c.gx * (cw + 1f)
             val y = y0 + c.gy * (ch + 1f)
-            val current = c === w.cell
+            val current = c === w.cell || c === w.cell.partner
+            // Salas grandes: une las dos celdas.
+            val partner = c.partner
+            if (partner != null && c.anchor && partner.known) {
+                col(if (current) Pal.LAMP else if (c.visited) Pal.WALL_TOP else Pal.WALL)
+                if (partner.gx > c.gx) shapes.rect(x + cw, y, 1f, ch) else shapes.rect(x, y + ch, cw, 1f)
+            }
             col(
                 when {
                     current -> if (blink) Pal.LAMP else Pal.LAMP_HI
@@ -1012,7 +1161,7 @@ class Renderer : Disposable {
                 }
             )
             shapes.rect(x, y, cw, ch)
-            if ((c.visited || w.mapRevealed) && !current) {
+            if ((c.visited || w.mapRevealed || c.iconShown) && !current) {
                 val icon = when (c.type) {
                     CellType.SHOP -> Pal.LAMP
                     CellType.TREASURE -> if (c.pedestals.all { it.taken } && c.stocked) null else Pal.LAMP_HI
@@ -1021,6 +1170,7 @@ class Renderer : Disposable {
                     CellType.BOSS -> Pal.CORAL
                     CellType.ELITE -> if (c.cleared) null else Pal.HAMBRIENTO
                     CellType.SECRET -> Pal.MEDUSA
+                    CellType.ANTESALA -> Pal.LAMP_DIM
                     else -> null
                 }
                 if (icon != null) {
@@ -1060,8 +1210,13 @@ class Renderer : Disposable {
         font.data.setScale(max(1, scale / 2).toFloat())
         batch.begin()
         val p = w.player
-        text("LUZ ${p.luz.roundToInt()}/${p.luzMax.roundToInt()}", 8f + p.luzMax + 6f, ih - 7f, Pal.LAMP_HI)
-        text("PISO ${w.floorNum}   BAJAS ${w.kills}", iw - 8f, ih - 7f, Pal.CREAM, align = 1)
+        if (w.inSanctuary) {
+            text("PERLAS ${Meta.perlas}", 8f, ih - 7f, Pal.SHELL)
+            text("ARMA: ${p.weapon.label.uppercase()}", iw - 8f, ih - 7f, Pal.CREAM, align = 1)
+        } else {
+            text("LUZ ${p.luz.roundToInt()}/${p.luzMax.roundToInt()}", 8f + p.luzMax + 6f, ih - 7f, Pal.LAMP_HI)
+            text("PISO ${w.floorNum}   BAJAS ${w.kills}   ${p.weapon.label.uppercase()}", iw - 8f, ih - 7f, Pal.CREAM, align = 1)
+        }
         for (f in w.fx.floaters) {
             text(f.text, f.x - camLeft, f.y - camBottom, f.color, alpha = (f.t / 0.9f).coerceIn(0f, 1f), align = 0)
         }
@@ -1075,6 +1230,8 @@ class Renderer : Disposable {
         if (it != null && w.mode == World.Mode.PLAYING) {
             val key = keyLabel(c, Action.USE)
             val price = when {
+                it.kind == PedKind.META && it.taken -> "  ·  ya es tuyo"
+                it.price > 0 && w.inSanctuary -> "  ·  ${it.price} Perlas (tienes ${Meta.perlas})"
                 it.price > 0 -> "  ·  ${it.price} de Luz"
                 it.kind == PedKind.EXVOTO -> "  ·  gratis"
                 else -> ""
@@ -1083,18 +1240,27 @@ class Renderer : Disposable {
             text(it.detail, iw / 2f, 36f, Pal.CREAM, align = 0, wrap = iw * 0.8f)
         }
         when (w.mode) {
-            World.Mode.DEAD -> if (w.modeT > 1.2f) {
-                text("Piso ${w.floorNum}  ·  ${w.kills} bajas  ·  ${w.owned.size} exvotos", iw / 2f, ih * 0.58f, Pal.CREAM, align = 0)
-                text(anyKeyText(c, "volver a bajar"), iw / 2f, ih * 0.46f, Pal.LAMP_HI, align = 0)
+            World.Mode.DEAD -> if (w.modeT > World.SLOWMO_TIME) {
+                val d = w.death
+                if (d != null) {
+                    val mm = (d.time / 60f).toInt()
+                    val ss = (d.time % 60f).toInt()
+                    text("TE APAGÓ", iw / 2f, 190f, Pal.CORAL, align = 0)
+                    text(d.cause, iw / 2f, 174f, Pal.LAMP_HI, align = 0)
+                    text("Piso ${d.floor}  ·  sala ${d.roomType}  ·  entraste con ${d.entryLuz} de Luz", iw / 2f, 152f, Pal.CREAM, align = 0)
+                    text("Quedaban ${d.enemiesLeft} enemigos  ·  ${mm}:${ss.toString().padStart(2, '0')}  ·  ${w.kills} bajas  ·  ${w.owned.size} exvotos", iw / 2f, 136f, Pal.CREAM, align = 0)
+                    text("Perlas de esta run: ${w.perlasRun}   (total ${Meta.perlas})", iw / 2f, 114f, Pal.SHELL, align = 0)
+                }
+                if (w.modeT > 1.8f) text(anyKeyText(c, "volver al Santuario"), iw / 2f, 88f, Pal.LAMP_HI, align = 0)
             }
             World.Mode.VICTORY -> {
                 val mm = (w.time / 60f).toInt()
                 val ss = (w.time % 60f).toInt()
                 text("MUELLE AHOGADO COMPLETADO", iw / 2f, ih * 0.74f, Pal.LAMP, align = 0)
                 text("Tiempo ${mm}:${ss.toString().padStart(2, '0')}  ·  ${w.kills} bajas  ·  ${w.owned.size} exvotos", iw / 2f, ih * 0.62f, Pal.CREAM, align = 0)
-                text("Perlas +${w.perlasRun}   (total ${w.perlasTotal})", iw / 2f, ih * 0.54f, Pal.SHELL, align = 0)
-                text("Fin de la F1. El Santuario y la Catedral llegan en la F2.", iw / 2f, ih * 0.42f, Pal.CREAM, align = 0)
-                if (w.modeT > 1.5f) text(anyKeyText(c, "una nueva run"), iw / 2f, ih * 0.32f, Pal.LAMP_HI, align = 0)
+                text("Perlas +${w.perlasRun}   (total ${Meta.perlas})", iw / 2f, ih * 0.54f, Pal.SHELL, align = 0)
+                text("La Catedral Sumergida llega en la F2.", iw / 2f, ih * 0.42f, Pal.CREAM, align = 0)
+                if (w.modeT > 1.8f) text(anyKeyText(c, "volver al Santuario"), iw / 2f, ih * 0.32f, Pal.LAMP_HI, align = 0)
             }
             else -> {}
         }

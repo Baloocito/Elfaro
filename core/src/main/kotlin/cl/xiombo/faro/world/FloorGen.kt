@@ -15,6 +15,8 @@ enum class CellType(val label: String) {
     STAIRS("Escalera"),
     BOSS("Jefe"),
     SECRET("Secreta"),
+    ANTESALA("Antesala"),
+    SANCTUARY("Santuario"),
 }
 
 /** Estado persistente de una sala del piso (se conserva al salir y volver). */
@@ -30,6 +32,11 @@ class Cell(val gx: Int, val gy: Int, var type: CellType) {
     val pedestals = ArrayList<Pedestal>()
     /** Para la sala secreta: lados por los que ya se abrió (vistos desde la secreta). */
     val openSides = HashSet<Dir>()
+    /** Sala grande: la otra celda que ocupa. El ancla es la de la izquierda o la de abajo. */
+    var partner: Cell? = null
+    var anchor = true
+    /** La Cartógrafa (meta) deja ver el tipo de las salas especiales desde el inicio del piso. */
+    var iconShown = false
 
     val isCombat get() = type == CellType.COMBAT || type == CellType.ELITE || type == CellType.STAIRS || type == CellType.BOSS
 }
@@ -46,26 +53,40 @@ class FloorMap(val cells: Array<Array<Cell?>>, val start: Cell) {
 
     fun neighbor(c: Cell, d: Dir): Cell? = get(c.gx + d.dx, c.gy + d.dy)
 
-    /** Lados con puerta: vecinos normales, o la secreta si ya se abrió desde este lado. */
-    fun doorsOf(c: Cell): Set<Dir> {
-        val out = HashSet<Dir>()
-        for (d in Dir.entries) {
+    /** La celda que manda en una sala grande (la de la izquierda o la de abajo). */
+    fun anchorOf(c: Cell): Cell = c.partner?.takeIf { !c.anchor } ?: c
+
+    /** Celdas de una sala con su subcelda: (celda, sx, sy). */
+    fun subsOf(anchor: Cell): List<Triple<Cell, Int, Int>> {
+        val p = anchor.partner ?: return listOf(Triple(anchor, 0, 0))
+        return if (p.gx > anchor.gx) listOf(Triple(anchor, 0, 0), Triple(p, 1, 0))
+        else listOf(Triple(anchor, 0, 0), Triple(p, 0, 1))
+    }
+
+    fun cellAtSub(anchor: Cell, sx: Int, sy: Int): Cell =
+        subsOf(anchor).firstOrNull { it.second == sx && it.third == sy }?.first ?: anchor
+
+    /** Puertas: vecinos normales, o la secreta si ya se abrió desde este lado. */
+    fun doorsOf(anchor: Cell): Set<DoorSpec> {
+        val out = HashSet<DoorSpec>()
+        for ((c, sx, sy) in subsOf(anchor)) for (d in Dir.entries) {
             val n = neighbor(c, d) ?: continue
+            if (n === anchor.partner || n === anchor) continue
             when {
-                c.type == CellType.SECRET -> if (d in c.openSides) out += d
-                n.type == CellType.SECRET -> if (d.opposite in n.openSides) out += d
-                else -> out += d
+                c.type == CellType.SECRET -> if (d in c.openSides) out += DoorSpec(d, sx, sy)
+                n.type == CellType.SECRET -> if (d.opposite in n.openSides) out += DoorSpec(d, sx, sy)
+                else -> out += DoorSpec(d, sx, sy)
             }
         }
         return out
     }
 
-    /** Lado con pared agrietada (hacia una secreta aún cerrada). */
-    fun crackOf(c: Cell): Dir? {
-        if (c.type == CellType.SECRET) return null
-        for (d in Dir.entries) {
+    /** Pared agrietada hacia una secreta aún cerrada. */
+    fun crackOf(anchor: Cell): DoorSpec? {
+        if (anchor.type == CellType.SECRET) return null
+        for ((c, sx, sy) in subsOf(anchor)) for (d in Dir.entries) {
             val n = neighbor(c, d) ?: continue
-            if (n.type == CellType.SECRET && d.opposite !in n.openSides) return d
+            if (n.type == CellType.SECRET && d.opposite !in n.openSides) return DoorSpec(d, sx, sy)
         }
         return null
     }
@@ -77,6 +98,14 @@ class FloorMap(val cells: Array<Array<Cell?>>, val start: Cell) {
  */
 object FloorGen {
     fun roomCount(floor: Int) = min(20, 7 + (1.5f * floor).roundToInt())
+
+    /** El Santuario: un piso de una sola sala. */
+    fun sanctuary(): FloorMap {
+        val grid = Array(FloorMap.GW) { arrayOfNulls<Cell>(FloorMap.GH) }
+        val c = Cell(4, 3, CellType.SANCTUARY)
+        grid[4][3] = c
+        return FloorMap(grid, c)
+    }
 
     fun generate(seed: Long, floor: Int, hasBoss: Boolean): FloorMap {
         val rng = Random(seed)
@@ -138,6 +167,8 @@ object FloorGen {
         val exit = deadEnds[0]
         if (exit.dist < 3) return null
         exit.type = if (hasBoss) CellType.BOSS else CellType.STAIRS
+        // Antes del jefe, siempre una antesala tranquila con el Farol de vigilia.
+        if (hasBoss) Dir.entries.mapNotNull { map.neighbor(exit, it) }.firstOrNull()?.type = CellType.ANTESALA
 
         val others = deadEnds.drop(1).shuffled(rng)
         others[0].type = CellType.TREASURE
@@ -160,12 +191,32 @@ object FloorGen {
         val candidates = (3 downTo 2).asSequence()
             .map { need -> empty.filter { filledNeighbors(it[0], it[1]) >= need && !touchesExit(it[0], it[1]) } }
             .firstOrNull { it.isNotEmpty() }
-        if (candidates != null) {
-            val s = candidates[rng.nextInt(candidates.size)]
-            val secret = Cell(s[0], s[1], CellType.SECRET)
-            grid[s[0]][s[1]] = secret
-            return FloorMap(grid, start).also { m -> m.all.forEach { it.seed = rng.nextLong() } }
+        // Salas grandes: une pares de celdas de combate vecinas (1 en el piso 1, hasta 2 después).
+        val bigTarget = min(2, 1 + floor / 2)
+        val pairs = ArrayList<Pair<Cell, Cell>>()
+        for (c in map.all) {
+            if (c.type != CellType.COMBAT) continue
+            for (d in listOf(Dir.RIGHT, Dir.UP)) {
+                val n = map.neighbor(c, d) ?: continue
+                if (n.type == CellType.COMBAT) pairs += c to n
+            }
         }
-        return map.also { m -> m.all.forEach { it.seed = rng.nextLong() } }
+        var made = 0
+        for ((a, b) in pairs.shuffled(rng)) {
+            if (made >= bigTarget) break
+            if (a.partner != null || b.partner != null) continue
+            if (rng.nextFloat() < 0.35f) continue
+            a.partner = b; a.anchor = true
+            b.partner = a; b.anchor = false
+            made++
+        }
+
+        val result = if (candidates != null) {
+            val s = candidates[rng.nextInt(candidates.size)]
+            grid[s[0]][s[1]] = Cell(s[0], s[1], CellType.SECRET)
+            FloorMap(grid, start)
+        } else map
+        result.all.forEach { it.seed = rng.nextLong() }
+        return result
     }
 }

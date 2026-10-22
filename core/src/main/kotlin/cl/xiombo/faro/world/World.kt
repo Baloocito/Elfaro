@@ -5,14 +5,16 @@ import cl.xiombo.faro.data.Balance.TILE
 import cl.xiombo.faro.data.EnemyDefs
 import cl.xiombo.faro.data.ExvotoDef
 import cl.xiombo.faro.data.Exvotos
+import cl.xiombo.faro.data.Meta
 import cl.xiombo.faro.data.Pal
 import cl.xiombo.faro.data.Rarity
 import cl.xiombo.faro.data.RoomTemplate
 import cl.xiombo.faro.data.RoomTemplates
+import cl.xiombo.faro.data.RunSave
 import cl.xiombo.faro.data.Tag
+import cl.xiombo.faro.data.Weapon
 import cl.xiombo.faro.input.InputState
 import cl.xiombo.faro.util.dist
-import com.badlogic.gdx.Gdx
 import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.max
@@ -23,25 +25,54 @@ import kotlin.math.sqrt
 import kotlin.random.Random
 
 /**
- * Una run del bioma 1 (F1): 3 pisos generados del Muelle Ahogado, con tienda, tesoro, refugio,
- * élites, sala secreta y la Sirena de Brea en el piso 3. Lógica determinista a 60 Hz (§11).
+ * Un mundo: el Santuario entre runs, o una run del bioma 1 (3 pisos del Muelle Ahogado y la Sirena
+ * de Brea). Lógica determinista a 60 Hz (§11).
  */
-class World(val seed: Long) {
+class World private constructor(val seed: Long, val kind: Kind) {
+    enum class Kind { SANCTUARY, RUN }
     enum class Mode { PLAYING, DEAD, VICTORY }
+    /** Lo que RunScreen debe crear a continuación. */
+    enum class Next { NONE, NEW_RUN, SANCTUARY }
 
     class PendingSpawn(val id: String, val x: Float, val y: Float, var t: Float, val affix: Affix?)
 
-    private val rng = Random(seed)
+    /** Resumen de la muerte para la pantalla de resultados (pilar: "si mueres debe quedar claro por qué"). */
+    class DeathInfo(
+        val cause: String, val floor: Int, val roomType: String, val entryLuz: Int,
+        val enemiesLeft: Int, val time: Float,
+    )
+
+    companion object {
+        const val SPAWN_TELEGRAPH = 0.7f
+        const val FADE = 0.3f
+        const val MECHA_PRICE = 30
+        const val MEJORA_PRICE = 20
+        const val MAPA_PRICE = 10
+        const val BOSS_PERLAS = 5
+        const val FLOOR_PERLAS = 1
+        const val SLOWMO_TIME = 1.2f
+
+        fun sanctuary(): World = World(System.nanoTime(), Kind.SANCTUARY).apply { initSanctuary() }
+        fun newRun(): World = World(System.nanoTime(), Kind.RUN).apply { initRun() }
+        fun resume(d: RunSave.Data): World? = runCatching { World(d.seed, Kind.RUN).apply { initFromSave(d) } }.getOrNull()
+    }
+
+    private var rng = Random(seed)
     val player = Player(0f, 0f)
 
     var floorNum = 1
         private set
+    private var floorSeed = 0L
     lateinit var map: FloorMap
         private set
+    /** Celda ancla de la sala actual (en salas grandes, la de la izquierda o la de abajo). */
     lateinit var cell: Cell
         private set
     lateinit var room: Room
         private set
+    private var enteredCell: Cell? = null
+    private var enteredFrom: Dir? = null
+    private var entryLuz = 0f
 
     val enemies = ArrayList<Enemy>()
     private val newEnemies = ArrayList<Enemy>()
@@ -85,10 +116,7 @@ class World(val seed: Long) {
     private var twinCd = 0f
     private var twinCostT = 0f
 
-    // Perlas (meta)
     var perlasRun = 0
-        private set
-    var perlasTotal = 0
         private set
 
     private var waves = ArrayDeque<List<Pair<String, Affix?>>>()
@@ -112,11 +140,10 @@ class World(val seed: Long) {
         private set
     var modeT = 0f
         private set
-    var restartRequested = false
+    var next = Next.NONE
         private set
     var fadeT = 0f
         private set
-    /** Cuenta los golpes recibidos (para la vibración del mando). */
     var hurtCount = 0
         private set
     var interactable: Pedestal? = null
@@ -125,88 +152,174 @@ class World(val seed: Long) {
         private set
     var targetY = 0f
         private set
+    var death: DeathInfo? = null
+        private set
+    private var lastCause = "La oscuridad"
 
     val gameOver get() = mode == Mode.DEAD
     val floor get() = floorNum
+    val inSanctuary get() = kind == Kind.SANCTUARY
+    val isBigRoom get() = cell.partner != null
 
-    init {
-        perlasTotal = runCatching { Gdx.app.getPreferences(PREFS).getInteger("perlas", 0) }.getOrDefault(0)
+    // ---------------------------------------------------------------- arranque
+
+    private fun initSanctuary() {
+        floorNum = 0
+        map = FloorGen.sanctuary()
+        enterCell(map.start, null)
+        player.weapon = Meta.weapon
+        showBanner("EL SANTUARIO", 2.2f)
+    }
+
+    /** Run nueva con lo elegido en el Santuario. */
+    private fun initRun() {
+        player.weapon = Meta.weapon
+        player.luzMax = Balance.LUZ_MAX + 10f * Meta.luzLevel
+        player.luz = player.luzMax
+        Meta.startExvoto?.let { id -> runCatching { Exvotos.get(id) }.getOrNull()?.let { owned += it } }
+        recomputeStats()
         startFloor(1)
+    }
+
+    private fun initFromSave(d: RunSave.Data) {
+        player.weapon = runCatching { Weapon.valueOf(d.weapon) }.getOrDefault(Weapon.FAROL)
+        player.luzMax = d.luzMax
+        weaponLevel = d.weaponLevel
+        for (id in d.owned) runCatching { Exvotos.get(id) }.getOrNull()?.let { owned += it }
+        offered += d.offered
+        mapRevealed = d.mapRevealed
+        kills = d.kills
+        time = d.time
+        perlasRun = d.perlasRun
+        recomputeStats()
+        floorNum = d.floorNum
+        floorSeed = d.floorSeed
+        rng = Random(d.seed xor d.floorSeed xor (d.cellX * 31L + d.cellY))
+        map = FloorGen.generate(floorSeed, floorNum, hasBoss = floorNum == 3)
+        for (c in map.all) c.templateIndex = Random(c.seed).nextInt(templatesFor(c).size)
+        for (cs in d.cells) {
+            val c = map[cs.gx, cs.gy] ?: continue
+            c.visited = cs.visited; c.known = cs.known; c.cleared = cs.cleared; c.stocked = cs.stocked
+            c.refugeUsed = cs.refugeUsed; c.iconShown = cs.iconShown
+            c.openSides.clear(); cs.openSides.forEach { n -> runCatching { Dir.valueOf(n) }.getOrNull()?.let { c.openSides += it } }
+            c.pedestals.clear()
+            for (p in cs.peds) {
+                val k = runCatching { PedKind.valueOf(p.kind) }.getOrNull() ?: continue
+                val ex = p.exvoto?.let { id -> runCatching { Exvotos.get(id) }.getOrNull() }
+                val wp = p.weapon?.let { runCatching { Weapon.valueOf(it) }.getOrNull() }
+                c.pedestals += Pedestal(p.x, p.y, k, ex, p.price, wp).also { it.taken = p.taken }
+            }
+        }
+        val c = map[d.cellX, d.cellY] ?: map.start
+        val moved = d.moved?.let { runCatching { Dir.valueOf(it) }.getOrNull() }
+        enterCell(c, moved)
+        player.luz = d.luz.coerceIn(1f, player.luzMax)
+        entryLuz = player.luz
+        showBanner("CONTINÚA EL DESCENSO  ·  PISO $floorNum", 2.4f)
     }
 
     // ---------------------------------------------------------------- pisos y salas
 
-    private fun templatesFor(c: Cell): List<RoomTemplate> = RoomTemplates.of(
-        when (c.type) {
-            CellType.START -> "inicio"
-            CellType.SHOP -> "tienda"
-            CellType.TREASURE -> "tesoro"
-            CellType.REFUGE -> "refugio"
-            CellType.SECRET -> "secreta"
-            CellType.BOSS -> "jefe"
-            else -> "combate"
+    private fun templatesFor(c: Cell): List<RoomTemplate> {
+        val partner = c.partner
+        if (partner != null) {
+            val anchor = if (c.anchor) c else partner
+            val other = if (c.anchor) partner else c
+            return RoomTemplates.of(if (other.gx != anchor.gx) "grande_h" else "grande_v")
         }
-    )
+        return RoomTemplates.of(
+            when (c.type) {
+                CellType.START -> "inicio"
+                CellType.SHOP -> "tienda"
+                CellType.TREASURE -> "tesoro"
+                CellType.REFUGE -> "refugio"
+                CellType.SECRET -> "secreta"
+                CellType.BOSS -> "jefe"
+                CellType.ANTESALA -> "antesala"
+                CellType.SANCTUARY -> "santuario"
+                else -> "combate"
+            }
+        )
+    }
 
     private fun startFloor(n: Int) {
         floorNum = n
-        map = FloorGen.generate(rng.nextLong(), n, hasBoss = n == 3)
+        floorSeed = rng.nextLong()
+        map = FloorGen.generate(floorSeed, n, hasBoss = n == 3)
         mapRevealed = false
         offered.clear()
         for (c in map.all) c.templateIndex = Random(c.seed).nextInt(templatesFor(c).size)
+        // La Cartógrafa: las salas especiales se ven en el mapa desde el inicio.
+        if (Meta.CARTOGRAFA in Meta.unlocks) {
+            for (c in map.all) if (c.type != CellType.COMBAT && c.type != CellType.SECRET) { c.known = true; c.iconShown = true }
+        }
         enterCell(map.start, null)
         showBanner("MUELLE AHOGADO  ·  PISO $n", 2.6f)
     }
 
-    private fun enterCell(c: Cell, moved: Dir?) {
-        cell = c
-        c.visited = true
-        c.known = true
-        for (d in Dir.entries) {
-            val n = map.neighbor(c, d) ?: continue
-            if (n.type != CellType.SECRET || n.openSides.isNotEmpty()) n.known = true
+    private fun enterCell(target: Cell, moved: Dir?) {
+        val anchor = map.anchorOf(target)
+        cell = anchor
+        enteredCell = target
+        enteredFrom = moved
+        for ((c, _, _) in map.subsOf(anchor)) {
+            c.visited = true
+            c.known = true
+            for (d in Dir.entries) {
+                val n = map.neighbor(c, d) ?: continue
+                if (n.type != CellType.SECRET || n.openSides.isNotEmpty()) n.known = true
+            }
         }
 
-        val tpl = templatesFor(c)[c.templateIndex]
-        room = Room(tpl, map.doorsOf(c), map.crackOf(c))
+        val tpl = templatesFor(anchor)[anchor.templateIndex % templatesFor(anchor).size]
+        room = Room(tpl, map.doorsOf(anchor), map.crackOf(anchor))
         enemies.clear(); newEnemies.clear(); pending.clear(); orbs.clear()
         projectiles.clear(); puddles.clear(); fires.clear()
         statue = null
         boss = null
         brea = false
-        room.doorsOpen = !(c.isCombat && !c.cleared)
+        room.doorsOpen = !(anchor.isCombat && !anchor.cleared)
 
-        val firstVisit = !c.stocked
-        stock(c, tpl)
-        val entry = if (moved == null) floatArrayOf(room.width / 2f, (room.rows / 2) * TILE - 2f) else room.entryPoint(moved.opposite)
+        val firstVisit = !anchor.stocked
+        stock(anchor, tpl)
+        val entry = if (moved == null) {
+            if (inSanctuary) floatArrayOf(room.width / 2f, 3.5f * TILE) else room.subCenter(0, 0)
+        } else {
+            val sub = map.subsOf(anchor).firstOrNull { it.first === target } ?: Triple(anchor, 0, 0)
+            room.entryPoint(DoorSpec(moved.opposite, sub.second, sub.third))
+        }
         player.placeAt(entry[0], entry[1])
         targetX = player.cx; targetY = player.cy
+        entryLuz = player.luz
 
-        waves = if (c.isCombat && !c.cleared && c.type != CellType.BOSS) planWaves(c) else ArrayDeque()
+        waves = if (anchor.isCombat && !anchor.cleared && anchor.type != CellType.BOSS) planWaves(anchor) else ArrayDeque()
         waveDelay = 0.7f
         intact = true
         fadeT = FADE
 
-        if (c.type == CellType.REFUGE) revealMap()
-        if (c.type == CellType.BOSS && !c.cleared) {
+        if (anchor.type == CellType.REFUGE) revealMap()
+        if (anchor.type == CellType.BOSS && !anchor.cleared) {
             val b = createEnemy("sirena", room.width / 2f, room.height - 64f, 1) as Sirena
             enemies += b
             boss = b
             showBanner("LA SIRENA DE BREA", 2.6f)
         } else if (firstVisit) {
-            when (c.type) {
+            when (anchor.type) {
                 CellType.SHOP -> showBanner("LA TIENDA DE LA PESCADORA")
                 CellType.TREASURE -> showBanner("UN EXVOTO OLVIDADO")
                 CellType.REFUGE -> showBanner("REFUGIO DEL FARO")
                 CellType.SECRET -> showBanner("SALA SECRETA")
                 CellType.ELITE -> showBanner("ALGO MÁS GRANDE ACECHA")
+                CellType.ANTESALA -> showBanner("ANTESALA  ·  ALGO CANTA AL OTRO LADO")
                 else -> {}
             }
         }
+        if (kind == Kind.RUN && mode == Mode.PLAYING) saveRun()
     }
 
     /** Coloca los objetos de la sala la primera vez que se visita. */
     private fun stock(c: Cell, tpl: RoomTemplate) {
+        if (c.type == CellType.SANCTUARY) { stockSanctuary(); return }
         if (c.stocked) return
         c.stocked = true
         val pos = tpl.pedestals.map { room.tileCenter(it[0], it[1]) }
@@ -214,7 +327,7 @@ class World(val seed: Long) {
             CellType.SHOP -> pos.forEachIndexed { i, p ->
                 val ped = when (i) {
                     2 -> Pedestal(p[0], p[1], PedKind.MECHA, price = MECHA_PRICE)
-                    3 -> if (weaponLevel < 3) Pedestal(p[0], p[1], PedKind.MEJORA, price = MEJORA_PRICE) else exvotoPed(p, true)
+                    3 -> if (weaponLevel < 3) Pedestal(p[0], p[1], PedKind.MEJORA, price = MEJORA_PRICE, weapon = player.weapon) else exvotoPed(p, true)
                     4 -> if (!mapRevealed) Pedestal(p[0], p[1], PedKind.MAPA, price = MAPA_PRICE) else exvotoPed(p, true)
                     else -> exvotoPed(p, true)
                 }
@@ -223,7 +336,58 @@ class World(val seed: Long) {
             CellType.TREASURE -> pos.firstOrNull()?.let { c.pedestals += exvotoPed(it, false) }
             CellType.SECRET -> pos.firstOrNull()?.let { c.pedestals += exvotoPed(it, false, Rarity.RARO) }
             CellType.REFUGE -> pos.firstOrNull()?.let { c.pedestals += Pedestal(it[0], it[1], PedKind.REFUGIO) }
+            CellType.ANTESALA -> pos.firstOrNull()?.let { c.pedestals += Pedestal(it[0], it[1], PedKind.VIGILIA) }
             else -> {}
+        }
+    }
+
+    /**
+     * El Santuario: pozo de descenso, las 4 armas, el exvoto inicial de la Pescadora y las mejoras de meta.
+     * El orden de los pedestales sigue la plantilla "santuario" (de abajo hacia arriba).
+     */
+    private fun stockSanctuary() {
+        val c = cell
+        c.pedestals.clear()
+        val pos = room.template.pedestals.map { room.tileCenter(it[0], it[1]) }
+        if (pos.size < 12) return
+        c.pedestals += Pedestal(pos[0][0], pos[0][1], PedKind.DESCENSO)
+        Weapon.entries.forEachIndexed { i, w ->
+            val p = pos[1 + i]
+            val unlocked = Meta.isUnlocked(w)
+            val price = if (w == Weapon.ANCLA && !unlocked) 60 else 0
+            c.pedestals += Pedestal(p[0], p[1], PedKind.ARMA, price = price, weapon = w).also {
+                it.selected = Meta.weapon == w
+                if (!unlocked) it.lockedText = Meta.unlockRequirement(w)
+            }
+        }
+        if (Meta.PESCADORA in Meta.unlocks) {
+            val commons = Exvotos.all.filter { it.rarity == Rarity.COMUN }
+            val r = Random(Meta.perlas * 7919L + Meta.unlocks.size)
+            val pick = commons.shuffled(r).take(3).toMutableList()
+            val chosen = Meta.startExvoto?.let { id -> commons.firstOrNull { it.id == id } }
+            if (chosen != null && chosen !in pick) pick[0] = chosen
+            pick.forEachIndexed { i, e ->
+                val p = pos[5 + i]
+                c.pedestals += Pedestal(p[0], p[1], PedKind.INICIAL, e).also { it.selected = Meta.startExvoto == e.id }
+            }
+        }
+        val luzPrice = if (Meta.luzLevel == 0) 40 else 80
+        val metas = listOf(
+            Triple(Meta.PESCADORA, "La Pescadora", "Abre su puesto: elige 1 exvoto común para empezar cada run.") to 20,
+            Triple("luz", "Mecha del Santuario", "+10 de Luz máxima inicial (nivel ${Meta.luzLevel}/2).") to luzPrice,
+            Triple(Meta.CARTOGRAFA, "La Cartógrafa", "Ves las salas especiales en el mapa desde el inicio de cada piso.") to 90,
+            Triple(Meta.CAMPANERO, "El Campanero renegado", "Segundo personaje jugable.") to 150,
+        )
+        metas.forEachIndexed { i, (m, price) ->
+            val p = pos[8 + i]
+            val have = when (m.first) {
+                "luz" -> Meta.luzLevel >= 2
+                else -> m.first in Meta.unlocks
+            }
+            c.pedestals += Pedestal(p[0], p[1], PedKind.META, price = if (have) 0 else price, metaId = m.first, metaTitle = m.second, metaDetail = m.third).also {
+                it.taken = have
+                if (m.first == Meta.CAMPANERO) it.lockedText = "rescátalo en la Catedral Sumergida"
+            }
         }
     }
 
@@ -234,9 +398,9 @@ class World(val seed: Long) {
         return Pedestal(p[0], p[1], PedKind.EXVOTO, e, if (priced) e.rarity.price else 0)
     }
 
-    /** Reparte el presupuesto de la sala (8 + 3·f) en 1–3 oleadas (§6). Las salas élite abren con un élite. */
+    /** Reparte el presupuesto de la sala (8 + 3·f) en 1–3 oleadas (§6). Salas grandes: ×1,6. */
     private fun planWaves(c: Cell): ArrayDeque<List<Pair<String, Affix?>>> {
-        val budget = Balance.budget(floorNum)
+        val budget = (Balance.budget(floorNum) * if (c.partner != null) 1.6f else 1f).roundToInt()
         val n = 1 + rng.nextInt(3)
         val pool = EnemyDefs.all.values.filter { it.biome == "muelle" }
         val cheapest = pool.minBy { it.cost }
@@ -249,7 +413,8 @@ class World(val seed: Long) {
                 wave += e.id to Affix.entries[rng.nextInt(Affix.entries.size)]
                 wb -= e.cost * 2
             }
-            while (wave.size < Balance.maxAlive(floorNum)) {
+            val cap = Balance.maxAlive(floorNum) + if (c.partner != null) 2 else 0
+            while (wave.size < cap) {
                 val options = pool.filter { it.cost <= wb }
                 if (options.isEmpty()) break
                 val pick = options[rng.nextInt(options.size)]
@@ -306,8 +471,17 @@ class World(val seed: Long) {
 
         if (mode != Mode.PLAYING) {
             modeT += dt
-            fx.update(dt)
-            if (modeT > 1.5f && inp.anyPressed) restartRequested = true
+            // Cámara lenta del último golpe: el mundo sigue un instante a un 30 % de velocidad.
+            if (mode == Mode.DEAD && modeT < SLOWMO_TIME) {
+                val sdt = dt * 0.3f
+                for (i in 0 until enemies.size) enemies[i].update(this, sdt)
+                enemies.removeAll { it.dead }
+                updateProjectiles(sdt)
+                fx.update(sdt)
+            } else {
+                fx.update(dt)
+            }
+            if (modeT > 1.8f && inp.anyPressed) next = Next.SANCTUARY
             inp.consume(dt)
             return
         }
@@ -353,7 +527,7 @@ class World(val seed: Long) {
         }
 
         interactable = cell.pedestals
-            .filter { !it.taken && dist(it.x, it.y, player.cx, player.y) < 20f }
+            .filter { (!it.taken || it.kind == PedKind.META) && dist(it.x, it.y, player.cx, player.y) < 20f }
             .minByOrNull { dist(it.x, it.y, player.cx, player.y) }
         val target = interactable
         if (inp.useBuf > 0f && target != null) {
@@ -366,7 +540,7 @@ class World(val seed: Long) {
     }
 
     private fun checkDoors() {
-        if (!room.doorsOpen || fadeT > FADE * 0.4f || player.falling) return
+        if (!room.doorsOpen || fadeT > FADE * 0.4f || player.falling || inSanctuary) return
         val d = when {
             player.x < 6f -> Dir.LEFT
             player.x > room.width - 6f -> Dir.RIGHT
@@ -374,7 +548,10 @@ class World(val seed: Long) {
             player.y > room.height - 5f -> Dir.UP
             else -> null
         } ?: return
-        val n = map.neighbor(cell, d) ?: return
+        val sub = room.subAt(player.x, player.y)
+        val from = map.cellAtSub(cell, sub[0], sub[1])
+        val n = map.neighbor(from, d) ?: return
+        if (n === cell || n === cell.partner) return
         enterCell(n, d)
     }
 
@@ -392,6 +569,7 @@ class World(val seed: Long) {
             gainLuz(Balance.ROOM_INTACT_BONUS)
             fx.floater("SALA INTACTA +5", player.cx, player.cy + 22f, Pal.LAMP_HI)
         }
+        if (kind == Kind.RUN) saveRun()
     }
 
     private fun separate() {
@@ -427,7 +605,7 @@ class World(val seed: Long) {
                 it.remove()
                 continue
             }
-            if (player.hurtOverlaps(p.x, p.y, p.r) && hurtPlayer(p.dmg, p.x, p.y, null)) it.remove()
+            if (player.hurtOverlaps(p.x, p.y, p.r) && hurtPlayer(p.dmg, p.x, p.y, null, p.cause)) it.remove()
         }
     }
 
@@ -510,6 +688,17 @@ class World(val seed: Long) {
         return true
     }
 
+    private fun payPerlas(price: Int): Boolean {
+        if (price <= 0) return true
+        if (Meta.perlas < price) {
+            fx.floater("FALTAN PERLAS", player.cx, player.cy + 20f, Pal.CORAL)
+            return false
+        }
+        Meta.perlas -= price
+        Meta.save()
+        return true
+    }
+
     private fun interact(p: Pedestal) {
         when (p.kind) {
             PedKind.EXVOTO -> {
@@ -536,7 +725,7 @@ class World(val seed: Long) {
                 p.taken = true
                 weaponLevel = min(3, weaponLevel + 1)
                 recomputeStats()
-                showBanner("FAROL +$weaponLevel", 1.8f)
+                showBanner("${player.weapon.label.uppercase()} +$weaponLevel", 1.8f)
             }
             PedKind.MAPA -> {
                 if (!pay(p.price)) return
@@ -551,17 +740,77 @@ class World(val seed: Long) {
                 fx.burst(p.x, p.y + 8f, 20, Pal.LAMP, 100f, 0.6f)
                 fx.floater("+30 LUZ", player.cx, player.cy + 20f, Pal.LAMP_HI)
             }
-            PedKind.ESCALERA -> startFloor(floorNum + 1)
+            PedKind.VIGILIA -> {
+                // Cura más cuanto menos Luz te quede: así la pelea con el jefe empieza más pareja.
+                p.taken = true
+                val k = player.luz / player.luzMax
+                val heal = when {
+                    k < 0.5f -> 30f
+                    k < 0.8f -> 20f
+                    else -> 10f
+                }
+                gainLuz(heal)
+                fx.burst(p.x, p.y + 8f, 24, Pal.LAMP_HI, 110f, 0.7f)
+                fx.floater("+${heal.toInt()} LUZ", player.cx, player.cy + 20f, Pal.LAMP_HI)
+                showBanner("EL FAROL DE VIGILIA TE ACOMPAÑA", 2f)
+                saveRun()
+            }
+            PedKind.ESCALERA -> {
+                perlasRun += FLOOR_PERLAS
+                Meta.addPerlas(FLOOR_PERLAS)
+                startFloor(floorNum + 1)
+            }
             PedKind.FIN -> {
                 mode = Mode.VICTORY
                 modeT = 0f
+                RunSave.clear()
             }
+            PedKind.ARMA -> {
+                val w = p.weapon ?: return
+                if (!Meta.isUnlocked(w)) {
+                    if (w == Weapon.ANCLA && p.price > 0) {
+                        if (!payPerlas(p.price)) return
+                        Meta.unlocks += Meta.ANCLA
+                        showBanner("ANCLA DESBLOQUEADA", 2f)
+                    } else {
+                        fx.floater("BLOQUEADA", p.x, p.y + 16f, Pal.CORAL)
+                        return
+                    }
+                }
+                Meta.weapon = w
+                Meta.save()
+                player.weapon = w
+                stockSanctuary()
+                fx.burst(p.x, p.y + 6f, 12, Pal.LAMP_HI, 80f, 0.4f)
+                showBanner("${w.label.uppercase()} EQUIPADO", 1.6f)
+            }
+            PedKind.INICIAL -> {
+                val e = p.exvoto ?: return
+                Meta.startExvoto = if (Meta.startExvoto == e.id) null else e.id
+                Meta.save()
+                stockSanctuary()
+                showBanner(if (Meta.startExvoto != null) "EMPIEZAS CON ${e.name.uppercase()}" else "SIN EXVOTO INICIAL", 1.8f)
+            }
+            PedKind.META -> {
+                if (p.taken) { fx.floater("YA ES TUYO", p.x, p.y + 16f, Pal.FOAM); return }
+                if (p.lockedText != null) { fx.floater("BLOQUEADO", p.x, p.y + 16f, Pal.CORAL); return }
+                if (!payPerlas(p.price)) return
+                when (p.metaId) {
+                    "luz" -> Meta.luzLevel = min(2, Meta.luzLevel + 1)
+                    else -> p.metaId?.let { Meta.unlocks += it }
+                }
+                Meta.save()
+                stockSanctuary()
+                fx.burst(p.x, p.y + 6f, 16, Pal.SHELL, 90f, 0.5f)
+                showBanner(p.metaTitle.uppercase(), 1.8f)
+            }
+            PedKind.DESCENSO -> next = Next.NEW_RUN
         }
     }
 
     private fun recomputeStats() {
         val hadCharges = stats.dashCharges
-        stats = Stats(owned, weaponLevel)
+        stats = Stats(owned, weaponLevel, player.weapon)
         if (stats.dashCharges > hadCharges) player.dashCharges = stats.dashCharges
     }
 
@@ -571,23 +820,33 @@ class World(val seed: Long) {
     }
 
     fun openSecret() {
-        val side = room.crackSide ?: return
-        val s = map.neighbor(cell, side) ?: return
-        if (side.opposite in s.openSides) return
-        s.openSides += side.opposite
+        val crack = room.crack ?: return
+        val from = map.cellAtSub(cell, crack.sx, crack.sy)
+        val s = map.neighbor(from, crack.side) ?: return
+        if (crack.side.opposite in s.openSides) return
+        s.openSides += crack.side.opposite
         s.known = true
         room.openCrack()
-        val g = room.gapTiles(side).first()
+        val g = room.gapTiles(crack).first()
         val c = room.tileCenter(g[0], g[1])
         fx.burst(c[0], c[1], 24, Pal.WALL_TOP, 120f, 0.6f)
         fx.floater("PASAJE SECRETO", c[0], c[1] + 10f, Pal.LAMP_HI)
         addShake(4f)
     }
 
+    /** La Campana abre una pared agrietada si su pulso la alcanza. */
+    fun bellAt(x: Float, y: Float, r: Float) {
+        val crack = room.crack ?: return
+        for (g in room.gapTiles(crack)) {
+            val c = room.tileCenter(g[0], g[1])
+            if (dist(x, y, c[0], c[1]) < r + 12f) { openSecret(); return }
+        }
+    }
+
     // ---------------------------------------------------------------- llamadas desde entidades
 
-    fun shoot(x: Float, y: Float, vx: Float, vy: Float, dmg: Float) {
-        projectiles += Projectile(x, y, vx, vy, 3f, dmg, 9f, Pal.CREAM)
+    fun shoot(x: Float, y: Float, vx: Float, vy: Float, dmg: Float, cause: String = "Notas · La Sirena de Brea") {
+        projectiles += Projectile(x, y, vx, vy, 3f, dmg, 9f, Pal.CREAM, cause)
     }
 
     fun addPuddle(x: Float, y: Float) { if (puddles.size < 40) puddles += Puddle(x, y, 4f) }
@@ -656,25 +915,33 @@ class World(val seed: Long) {
         fx.blast(b.x, b.y, 60f)
         addShake(6f)
         hitstop(10)
-        showBanner("LA SIRENA DE BREA SE HUNDE", 3f)
+        val firstTime = "sirena" !in Meta.bosses
+        Meta.bosses += "sirena"
+        perlasRun += BOSS_PERLAS
+        Meta.addPerlas(BOSS_PERLAS)
+        showBanner(if (firstTime) "LA SIRENA SE HUNDE  ·  ARPÓN DESBLOQUEADO" else "LA SIRENA DE BREA SE HUNDE", 3.5f)
         val center = room.template.pedestals.firstOrNull()?.let { room.tileCenter(it[0], it[1]) }
             ?: floatArrayOf(room.width / 2f, room.height / 2f)
         cell.pedestals += exvotoPed(center, false, Rarity.EPICO)
         val end = room.nearestFloor(center[0], center[1] - 48f)
         cell.pedestals += Pedestal(end[0], end[1], PedKind.FIN)
-        perlasRun += BOSS_PERLAS
-        perlasTotal += BOSS_PERLAS
-        runCatching { Gdx.app.getPreferences(PREFS).putInteger("perlas", perlasTotal).flush() }
     }
 
     fun gainLuz(v: Float) { player.luz = min(player.luzMax, player.luz + v) }
 
-    /** Daño al jugador: resta Luz, 0,8 s de invulnerabilidad y 3 frames de hit-stop. */
-    fun hurtPlayer(amount: Float, sx: Float, sy: Float, src: Enemy?): Boolean {
+    /**
+     * Daño al jugador: resta Luz, 0,8 s de invulnerabilidad y 3 frames de hit-stop.
+     * [attack] nombra el ataque para la pantalla de muerte ("Embestida", "Pinza"…).
+     */
+    fun hurtPlayer(amount: Float, sx: Float, sy: Float, src: Enemy?, attack: String): Boolean {
         val p = player
         if (mode != Mode.PLAYING || p.invulnerable) return false
         var total = amount
         if (src?.affix == Affix.HAMBRIENTO) total += 3f
+        lastCause = if (src != null) {
+            val elite = src.affix?.let { " (élite ${it.label})" } ?: ""
+            "$attack · ${src.def.name}$elite"
+        } else attack
         p.luz -= total
         hurtCount++
         intact = false
@@ -694,6 +961,7 @@ class World(val seed: Long) {
 
     fun onPlayerFell() {
         player.luz -= Player.FALL_DAMAGE
+        lastCause = "Caída al agua"
         hurtCount++
         player.hurtIframes = Balance.HIT_IFRAMES
         intact = false
@@ -702,16 +970,33 @@ class World(val seed: Long) {
         if (player.luz <= 0f) die()
     }
 
+    /** Abandonar desde la pausa cuenta como una muerte (las Perlas ganadas se conservan). */
+    fun abandon() {
+        if (kind != Kind.RUN || mode != Mode.PLAYING) return
+        lastCause = "Abandonaste el descenso"
+        die()
+    }
+
     private fun die() {
         player.luz = 0f
         mode = Mode.DEAD
         modeT = 0f
+        death = DeathInfo(
+            cause = lastCause,
+            floor = floorNum,
+            roomType = cell.type.label + if (cell.partner != null) " (grande)" else "",
+            entryLuz = entryLuz.roundToInt(),
+            enemiesLeft = enemies.count { !it.killed } + pending.size,
+            time = time,
+        )
         fx.burst(player.cx, player.cy, 30, Pal.LAMP_DIM, 120f, 0.9f)
         showBanner("LA LUZ SE APAGÓ", 99f)
+        RunSave.clear()
     }
 
     /** Radio de luz de Isla (§3): 48 + 1,2·Luz, con los modificadores del bioma y los exvotos. */
     fun playerLight(): Float {
+        if (inSanctuary) return 210f
         var r = if (stats.eye) 168f else Balance.lightRadius(player.luz)
         if (brea) r *= 0.7f
         for (e in enemies) {
@@ -723,16 +1008,51 @@ class World(val seed: Long) {
         return r
     }
 
-    /** F3: carta + Luz llena · F4: ir al jefe · F5: exvoto al azar · F6: 150 de daño a todo. */
+    // ---------------------------------------------------------------- guardado
+
+    /** Guarda la run: se llama al entrar en cada sala, al usar el Farol de vigilia y al pausar la app. */
+    fun saveRun() {
+        if (kind != Kind.RUN || mode != Mode.PLAYING) return
+        val entered = enteredCell ?: cell
+        RunSave.save(
+            RunSave.Data(
+                seed = seed, floorNum = floorNum, floorSeed = floorSeed,
+                cellX = entered.gx, cellY = entered.gy, moved = enteredFrom?.name,
+                luz = player.luz, luzMax = player.luzMax,
+                weapon = player.weapon.name, weaponLevel = weaponLevel,
+                owned = owned.map { it.id }, offered = offered.toList(),
+                mapRevealed = mapRevealed, kills = kills, time = time, perlasRun = perlasRun,
+                cells = map.all.map { c ->
+                    RunSave.CellState(
+                        c.gx, c.gy, c.visited, c.known, c.cleared, c.stocked, c.refugeUsed, c.iconShown,
+                        c.openSides.map { it.name },
+                        c.pedestals.map { p ->
+                            RunSave.PedState(p.kind.name, p.x, p.y, p.exvoto?.id, p.price, p.taken, p.weapon?.name)
+                        },
+                    )
+                },
+            )
+        )
+    }
+
+    /** F3: carta + Luz llena · F4: ir al jefe · F5: exvoto (en el Santuario: +50 Perlas y todas las armas) · F6: 150 de daño. */
     private fun debugCommand(cmd: Int) {
         when (cmd) {
-            3 -> { revealMap(); player.luz = player.luzMax }
-            4 -> {
+            3 -> { if (!inSanctuary) { revealMap(); player.luz = player.luzMax } }
+            4 -> if (!inSanctuary) {
                 if (floorNum != 3) startFloor(3)
                 val b = map.all.first { it.type == CellType.BOSS }
                 enterCell(b, null)
             }
-            5 -> Exvotos.roll(rng, owned.map { it.id }.toSet())?.let { owned += it; recomputeStats(); showBanner(it.name.uppercase(), 1.5f) }
+            5 -> if (inSanctuary) {
+                Meta.perlas += 50
+                Meta.bosses += "sirena"; Meta.bosses += "obispo"; Meta.unlocks += Meta.ANCLA
+                Meta.save()
+                stockSanctuary()
+                showBanner("DEBUG: +50 PERLAS Y TODAS LAS ARMAS", 1.8f)
+            } else {
+                Exvotos.roll(rng, owned.map { it.id }.toSet())?.let { owned += it; recomputeStats(); showBanner(it.name.uppercase(), 1.5f) }
+            }
             6 -> for (e in enemies) e.takeHit(this, 150f, e.x, e.y, HitKind.BLAST)
         }
     }
@@ -743,15 +1063,5 @@ class World(val seed: Long) {
     private fun showBanner(text: String, seconds: Float = 2.2f) {
         banner = text
         bannerT = seconds
-    }
-
-    companion object {
-        const val SPAWN_TELEGRAPH = 0.7f
-        const val FADE = 0.3f
-        const val MECHA_PRICE = 30
-        const val MEJORA_PRICE = 20
-        const val MAPA_PRICE = 10
-        const val BOSS_PERLAS = 5
-        const val PREFS = "faro-hundido"
     }
 }
