@@ -213,7 +213,14 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         if (floor != 1) startFloor(floor)
         when {
             toBoss -> map.all.firstOrNull { it.type == CellType.BOSS }?.let { enterCell(it, null) }
-            toCell -> map.all.firstOrNull { it.type == CellType.CELDA }?.let { enterCell(it, null) }
+            toCell -> map.all.firstOrNull { it.type == CellType.CELDA }?.let {
+                enterCell(it, null)
+                // Entrar por una puerta, no dentro de la jaula.
+                room.doors.minByOrNull { d -> d.side.ordinal }?.let { d ->
+                    val e = room.entryPoint(d)
+                    player.placeAt(e[0], e[1])
+                }
+            }
         }
     }
 
@@ -1456,6 +1463,8 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
 
     fun hitstop(frames: Int) { hitstopFrames = max(hitstopFrames, frames) }
     fun addShake(amount: Float) { shake = max(shake, amount) }
+
+    fun clearBanner() { bannerT = 0f }
 
     private fun showBanner(text: String, seconds: Float = 2.2f) {
         banner = text

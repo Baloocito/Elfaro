@@ -17,6 +17,15 @@ así que cada versión nueva se instala encima de la anterior sin perder nada.
 
 ## Estado: F2 · Catedral Sumergida
 
+**Menú principal**: al abrir el juego. Continuar descenso (si hay una run guardada), Jugar (ir al
+Santuario), **Niveles de prueba** (Muelle piso 1, la Sirena, Catedral piso 4, el Obispo y la celda
+de Amparo; estas runs no guardan ni dan Perlas) y Configurar mando. Desde la pausa se vuelve con
+"Menú principal" y la run real queda guardada.
+
+**Amparo, la guardesa**: la tienda del Santuario está cerrada hasta rescatarla. Está en una celda
+custodiada (con un élite) en uno de los 3 pisos del Muelle, en un callejón sin salida lejano. Hay
+que despejar la sala y abrir la jaula. Desde entonces vive en el Santuario y se pueden gastar las Perlas.
+
 La run ya no termina en la Sirena: tras vencerla, una escalera baja a la **Catedral Sumergida**
 (pisos 4-6) y la versión termina con el **Obispo Coral**.
 

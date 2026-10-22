@@ -30,6 +30,7 @@ class RunScreen : KtxScreen {
         Gdx.input.inputProcessor = controls
         Gdx.input.setCatchKey(Input.Keys.BACK, true)   // atrás pausa en vez de cerrar
         menu.openTitle(RunSave.exists())
+        world.clearBanner()
     }
 
     /** Opciones del menú principal, de los niveles de prueba y de la pausa. */
@@ -40,6 +41,7 @@ class RunScreen : KtxScreen {
             PauseMenu.Request.ToTitle -> {
                 world.saveRun()   // una run real queda guardada para "Continuar descenso"
                 newWorld(World.sanctuary())
+                world.clearBanner()
                 menu.openTitle(RunSave.exists())
             }
             is PauseMenu.Request.Test -> newWorld(World.testRun(r.floor, r.toBoss, r.toCell))
