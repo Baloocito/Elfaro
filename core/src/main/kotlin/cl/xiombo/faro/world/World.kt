@@ -15,6 +15,7 @@ import cl.xiombo.faro.data.Tag
 import cl.xiombo.faro.data.Weapon
 import cl.xiombo.faro.input.InputState
 import cl.xiombo.faro.util.dist
+import com.badlogic.gdx.math.MathUtils
 import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.max
@@ -51,6 +52,7 @@ class World private constructor(val seed: Long, val kind: Kind) {
         const val BOSS_PERLAS = 5
         const val FLOOR_PERLAS = 1
         const val SLOWMO_TIME = 1.2f
+        const val FLASH_TIME = 0.25f
 
         fun sanctuary(): World = World(System.nanoTime(), Kind.SANCTUARY).apply { initSanctuary() }
         fun newRun(): World = World(System.nanoTime(), Kind.RUN).apply { initRun() }
@@ -457,6 +459,7 @@ class World private constructor(val seed: Long, val kind: Kind) {
 
     fun update(dt: Float, inp: InputState) {
         time += dt
+        flashT = max(0f, flashT - dt)
         bannerT -= dt
         fadeT -= dt
         if (hitstopFrames > 0) {
@@ -503,6 +506,7 @@ class World private constructor(val seed: Long, val kind: Kind) {
             }
         }
 
+        updateVeilTracking()
         for (i in 0 until enemies.size) enemies[i].update(this, dt)
         if (newEnemies.isNotEmpty()) { enemies += newEnemies; newEnemies.clear() }
         separate()
@@ -998,9 +1002,71 @@ class World private constructor(val seed: Long, val kind: Kind) {
     }
 
     /** Radio de luz de Isla (§3): 48 + 1,2·Luz, con los modificadores del bioma y los exvotos. */
+    /**
+     * Velar: tras 0,4 s velando, los enemigos (no jefes) a más de 64 px te pierden el rastro y van
+     * a buscarte donde te vieron. Te reencuentran si se acercan mucho, si los golpeas o, al dejar
+     * de velar, si quedan dentro de tu luz.
+     */
+    private fun updateVeilTracking() {
+        val p = player
+        val hiding = p.veiling && p.veilT >= Balance.VEIL_LOSE_TIME
+        val light = playerLight()
+        for (e in enemies) {
+            if (e.isBoss || !e.targetable) { e.lost = false; continue }
+            val d = dist(e.x, e.y, p.cx, p.cy)
+            if (!e.lost) {
+                if (hiding && d > Balance.VEIL_LOSE_DIST && e.state == EState.MOVE) {
+                    e.lost = true
+                    e.lostX = targetX; e.lostY = targetY
+                    fx.floater("?", e.x, e.y + e.hh + 8f, Pal.SHELL)
+                }
+                continue
+            }
+            val found = if (p.veiling) d < Balance.VEIL_FIND_DIST else d < light * 0.85f
+            if (found) {
+                e.lost = false
+                fx.floater("!", e.x, e.y + e.hh + 8f, Pal.CORAL)
+            } else if (dist(e.x, e.y, e.lostX, e.lostY) < 12f) {
+                // Busca: elige otro punto cercano.
+                e.lostX = (e.x + MathUtils.random(-48f, 48f)).coerceIn(24f, room.width - 24f)
+                e.lostY = (e.y + MathUtils.random(-48f, 48f)).coerceIn(24f, room.height - 24f)
+            }
+        }
+    }
+
+    /** Fogonazo al soltar Velar (exvotos Pabilo corto y Sal en los ojos). */
+    fun veilFlash() {
+        val p = player
+        val r = stats.flashRadius
+        flashT = FLASH_TIME
+        fx.ring(p.cx, p.cy, r, Pal.LAMP_HI)
+        fx.ring(p.cx, p.cy, r * 0.55f, Pal.CREAM)
+        fx.burst(p.cx, p.cy, 14, Pal.LAMP_HI, 160f, 0.35f)
+        addShake(2f)
+        fx.floater("FOGONAZO", p.cx, p.cy + 18f, Pal.LAMP_HI)
+        var hits = 0
+        for (e in enemies) {
+            if (!e.targetable) continue
+            if (dist(e.x, e.y, p.cx, p.cy) - e.radius > r) continue
+            val wasLost = e.lost
+            if (stats.flashDmg > 0f) e.takeHit(this, stats.flashDmg, p.cx, p.cy, HitKind.LAMP) else e.lost = false
+            if (stats.flashStun > 0f) e.stun(stats.flashStun)
+            if (wasLost) fx.floater("!", e.x, e.y + e.hh + 8f, Pal.CORAL)
+            hits++
+        }
+        if (hits > 0) hitstop(3)
+    }
+
+    /** Brillo del Fogonazo (s restantes). */
+    var flashT = 0f
+        private set
+
     fun playerLight(): Float {
         if (inSanctuary) return 210f
         var r = if (stats.eye) 168f else Balance.lightRadius(player.luz)
+        val k = player.veilK
+        if (k > 0f && r > Balance.VEIL_RADIUS) r += (Balance.VEIL_RADIUS - r) * k
+        if (flashT > 0f) r += 90f * (flashT / FLASH_TIME)
         if (brea) r *= 0.7f
         for (e in enemies) {
             if (e.affix == Affix.BRILLANTE && !e.killed) {
@@ -1038,7 +1104,7 @@ class World private constructor(val seed: Long, val kind: Kind) {
         )
     }
 
-    /** F3: carta + Luz llena · F4: ir al jefe · F5: exvoto (en el Santuario: +50 Perlas y todas las armas) · F6: 150 de daño · F8: Isla recibe 40 · F9: siguiente sala grande o antesala. */
+    /** F3: carta + Luz llena · F4: ir al jefe · F5: exvoto (en el Santuario: +50 Perlas y todas las armas) · F6: 150 de daño · F8: Isla recibe 40 · F9: siguiente sala grande o antesala · F10: exvotos de Velar. */
     private fun debugCommand(cmd: Int) {
         when (cmd) {
             3 -> { if (!inSanctuary) { revealMap(); player.luz = player.luzMax } }
@@ -1057,6 +1123,11 @@ class World private constructor(val seed: Long, val kind: Kind) {
                 Exvotos.roll(rng, owned.map { it.id }.toSet())?.let { owned += it; recomputeStats(); showBanner(it.name.uppercase(), 1.5f) }
             }
             6 -> for (e in enemies) e.takeHit(this, 150f, e.x, e.y, HitKind.BLAST)
+            10 -> if (!inSanctuary) {
+                for (id in listOf("pabilo_corto", "sal_ojos", "marea_quieta")) if (owned.none { it.id == id }) owned += Exvotos.get(id)
+                recomputeStats()
+                showBanner("DEBUG: EXVOTOS DE VELAR", 1.5f)
+            }
             9 -> if (!inSanctuary) {
                 // Salta a la siguiente sala grande o antesala del piso (para probarlas).
                 val list = map.all.filter { (it.partner != null && it.anchor) || it.type == CellType.ANTESALA }

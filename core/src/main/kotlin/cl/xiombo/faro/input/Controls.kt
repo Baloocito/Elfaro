@@ -61,7 +61,7 @@ class Controls(private val renderer: Renderer) : InputAdapter() {
         private set
     var joyY = 0f
         private set
-    private val btnPtr = intArrayOf(-1, -1, -1, -1)   // 0 Farol, 1 Destello, 2 Haz, 3 Usar
+    private val btnPtr = intArrayOf(-1, -1, -1, -1, -1)   // 0 Farol, 1 Destello, 2 Haz, 3 Usar, 4 Velar
 
     /** El botón USAR solo aparece cerca de algo con lo que interactuar. */
     var useVisible = false
@@ -79,6 +79,7 @@ class Controls(private val renderer: Renderer) : InputAdapter() {
             Btn(bw - 0.43f * u, 0.13f * u, 0.08f * u, "DESTELLO"),
             Btn(bw - 0.17f * u, 0.53f * u, 0.08f * u, "HAZ"),
             Btn(bw - 0.43f * u, 0.40f * u, 0.08f * u, "USAR"),
+            Btn(bw - 0.66f * u, 0.13f * u, 0.07f * u, "VELAR"),
         )
     }
 
@@ -125,6 +126,7 @@ class Controls(private val renderer: Renderer) : InputAdapter() {
                 if (renderer.debug) state.debugCmd = keycode - Input.Keys.F3 + 3
             Input.Keys.F8 -> if (renderer.debug) state.debugCmd = 8
             Input.Keys.F9 -> if (renderer.debug) state.debugCmd = 9
+            Input.Keys.F10 -> if (renderer.debug) state.debugCmd = 10
         }
         return true
     }
@@ -232,6 +234,8 @@ class Controls(private val renderer: Renderer) : InputAdapter() {
         if (l > 1f) { mx /= l; my /= l }
         state.mx = mx
         state.my = my
+        state.veil = k.isKeyPressed(Input.Keys.C) || k.isKeyPressed(Input.Keys.CONTROL_LEFT) ||
+            (touch && isPressed(4)) || (pad.controller != null && pad.held[Action.VELAR.ordinal])
 
         when {
             padActive -> aimWithStick(w, pad)

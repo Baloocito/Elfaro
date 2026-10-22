@@ -35,6 +35,15 @@ object Balance {
     const val FAROL_TOTAL = FAROL_STARTUP + FAROL_ACTIVE + FAROL_RECOVERY
     const val FAROL_RANGE = 28f
     const val FAROL_HALF_ANGLE_DEG = 30f // cono de 60°
+
+    // Velar (§14): la luz baja a 56 px y los enemigos lejanos pierden el rastro.
+    const val VEIL_RADIUS = 56f
+    const val VEIL_MOVE_FACTOR = 0.7f
+    const val VEIL_LOSE_TIME = 0.4f      // tiempo velando antes de que te pierdan
+    const val VEIL_LOSE_DIST = 64f       // los más cerca que esto siguen viéndote
+    const val VEIL_FIND_DIST = 36f       // velando, te encuentran si se acercan tanto
+    const val VEIL_CHARGE = 0.5f         // velando este tiempo, al soltar sale el Fogonazo
+    const val FLASH_COOLDOWN = 6f
     const val COMBO_WINDOW = 0.30f
     const val ATTACK_MOVE_FACTOR = 0.45f
     const val BURN_DPS = 3f

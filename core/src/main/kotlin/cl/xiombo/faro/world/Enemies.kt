@@ -72,6 +72,14 @@ abstract class Enemy(val def: EnemyDef, x: Float, y: Float, val floor: Int, val 
     var dirY = 0f
     var anim = MathUtils.random(10f)
     var hitByPlayer = false
+
+    /** Te perdió el rastro mientras velabas: va a donde te vio por última vez y busca. */
+    var lost = false
+    var lostX = 0f
+    var lostY = 0f
+    /** Objetivo de este enemigo: Isla (o la estatua) o, si te perdió, el punto donde busca. */
+    protected fun tgtX(w: World) = if (lost) lostX else w.targetX
+    protected fun tgtY(w: World) = if (lost) lostY else w.targetY
     var split = false
     private var puddleT = 0f
 
@@ -136,6 +144,7 @@ abstract class Enemy(val def: EnemyDef, x: Float, y: Float, val floor: Int, val 
 
     open fun takeHit(w: World, amount: Float, fromX: Float, fromY: Float, kind: HitKind): Boolean {
         if (!targetable) return false
+        if (kind != HitKind.BURN) lost = false
         hp -= if (stunned) amount * 1.25f else amount
         when (kind) {
             HitKind.MELEE, HitKind.BLAST, HitKind.SLAM, HitKind.LAMP -> flash = 0.1f
@@ -190,14 +199,14 @@ class Ahogado(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) : En
 
     override fun think(w: World, dt: Float) {
         val p = w.player
-        val dx = w.targetX - x
-        val dy = w.targetY - y
+        val dx = tgtX(w) - x
+        val dy = tgtY(w) - y
         val d = max(0.001f, sqrt(dx * dx + dy * dy))
         when (state) {
             EState.MOVE -> {
                 cd -= dt
                 if (d > 22f) w.room.move(this, dx / d * spd * dt, dy / d * spd * dt)
-                if (d < def.range + 10f && cd <= 0f) {
+                if (!lost && d < def.range + 10f && cd <= 0f) {
                     dirX = dx / d; dirY = dy / d
                     beginTelegraph(def.telegraph)
                 }
@@ -247,8 +256,8 @@ class Medusa(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) : Ene
             return
         }
         val p = w.player
-        val dx = w.targetX - x
-        val dy = w.targetY - y
+        val dx = tgtX(w) - x
+        val dy = tgtY(w) - y
         val d = max(0.001f, sqrt(dx * dx + dy * dy))
         when (state) {
             EState.MOVE -> {
@@ -259,7 +268,7 @@ class Medusa(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) : Ene
                     val my = dy / d + dx / d * wob
                     w.room.move(this, mx * spd * dt, my * spd * dt)
                 }
-                if (d < PULSE_R + 6f && cd <= 0f) beginTelegraph(def.telegraph)
+                if (!lost && d < PULSE_R + 6f && cd <= 0f) beginTelegraph(def.telegraph)
             }
             EState.TELEGRAPH -> {
                 stateT -= dt
@@ -316,8 +325,8 @@ class Cangrejo(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) : E
 
     override fun think(w: World, dt: Float) {
         val p = w.player
-        val dx = w.targetX - x
-        val dy = w.targetY - y
+        val dx = tgtX(w) - x
+        val dy = tgtY(w) - y
         val d = max(0.001f, sqrt(dx * dx + dy * dy))
         val turn = if (slowed) TURN * 0.6f else TURN
         if (state == EState.MOVE || state == EState.RECOVER) face = turnToward(face, atan2(dy, dx), turn * dt)
@@ -333,7 +342,7 @@ class Cangrejo(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) : E
                 if (d > 44f) { mx += fx * 0.8f; my += fy * 0.8f } else if (d < 18f) { mx -= fx * 0.6f; my -= fy * 0.6f }
                 val l = max(0.001f, sqrt(mx * mx + my * my))
                 if (w.room.move(this, mx / l * spd * dt, my / l * spd * dt)) side = -side
-                if (d < def.range + 8f && cd <= 0f) beginTelegraph(def.telegraph)
+                if (!lost && d < def.range + 8f && cd <= 0f) beginTelegraph(def.telegraph)
             }
             EState.TELEGRAPH -> {
                 stateT -= dt

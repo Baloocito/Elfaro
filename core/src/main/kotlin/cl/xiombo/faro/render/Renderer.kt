@@ -198,7 +198,7 @@ class Renderer : Disposable {
     private fun keyLabel(c: Controls, a: Action): String = when {
         c.padActive -> Bindings.label(pad?.controller, a)
         c.touch -> a.label.uppercase()
-        else -> when (a) { Action.ATTACK -> "Clic"; Action.DASH -> "Espacio"; Action.HAZ -> "Clic der."; Action.USE -> "E" }
+        else -> when (a) { Action.ATTACK -> "Clic"; Action.DASH -> "Espacio"; Action.HAZ -> "Clic der."; Action.USE -> "E"; Action.VELAR -> "C" }
     }
 
     private fun anyKeyText(c: Controls, what: String) = when {
@@ -212,6 +212,7 @@ class Renderer : Disposable {
         Action.DASH -> Pal.FOAM
         Action.HAZ -> Pal.CORAL
         Action.USE -> Pal.MEDUSA
+        Action.VELAR -> Pal.TIDE
     }
 
     private fun drawMenu(m: PauseMenu, pad: Gamepad, c: Controls) {
@@ -773,7 +774,24 @@ class Renderer : Disposable {
         // Farol (siempre visible: es la vida). Con otra arma, el farol cuelga del cinto.
         val lx = (x + p.aimX * 8f).roundToInt().toFloat()
         val ly = (y + 5f + p.aimY * 5f).roundToInt().toFloat()
-        if (p.weapon == Weapon.FAROL || w.gameOver) {
+        if (p.veiling) {
+            // Velando: Isla tapa el farol con el abrigo, pegado al cuerpo.
+            outlined(x - 2f, y + 2f, 4f, 4f, Pal.LAMP_DIM)
+            col(Pal.COAT)
+            shapes.rect(x - 3f, y + 5f, 6f, 2f)
+            // Carga del Fogonazo: puntos que se cierran alrededor; brillan cuando está listo.
+            if (w.stats.flashOn) {
+                val ready = p.flashCharged
+                val k = (p.veilT / Balance.VEIL_CHARGE).coerceIn(0f, 1f)
+                val rr = 18f - 6f * k
+                val c = if (ready) Pal.LAMP_HI else if (p.flashCd > 0f) Pal.SEAM else Pal.LAMP_DIM
+                for (i in 0 until 8) {
+                    val ang = i * MathUtils.PI2 / 8f + w.time * (if (ready) 4f else 1.5f)
+                    col(c, if (ready) 0.95f else 0.6f)
+                    shapes.rect((x + cos(ang) * rr).roundToInt().toFloat(), (y + 5f + sin(ang) * rr).roundToInt().toFloat(), 1f, 1f)
+                }
+            }
+        } else if (p.weapon == Weapon.FAROL || w.gameOver) {
             outlined(lx - 2f, ly - 2f, 4f, 4f, if (w.gameOver) Pal.SEAM else Pal.LAMP)
         } else {
             outlined(x - (if (p.aimX >= 0f) 7f else -4f), y + 1f, 3f, 3f, Pal.LAMP)
@@ -1321,7 +1339,7 @@ class Renderer : Disposable {
         for (i in btns.indices) {
             if (i == 3 && !c.useVisible) continue
             val b = btns[i]
-            val base = when (i) { 0 -> Pal.LAMP; 1 -> Pal.LAMP_HI; 3 -> Pal.FOAM; else -> Pal.CREAM }
+            val base = when (i) { 0 -> Pal.LAMP; 1 -> Pal.LAMP_HI; 3 -> Pal.FOAM; 4 -> Pal.TIDE; else -> Pal.CREAM }
             col(base, if (c.isPressed(i)) 0.55f else 0.22f)
             shapes.circle(b.x, b.y, b.r, 40)
         }
