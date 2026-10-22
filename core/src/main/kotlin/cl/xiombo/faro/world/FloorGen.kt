@@ -1,5 +1,7 @@
 package cl.xiombo.faro.world
 
+import cl.xiombo.faro.data.Biome
+
 import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -16,6 +18,7 @@ enum class CellType(val label: String) {
     BOSS("Jefe"),
     SECRET("Secreta"),
     ANTESALA("Antesala"),
+    CAPILLA("Capilla"),
     SANCTUARY("Santuario"),
 }
 
@@ -173,6 +176,8 @@ object FloorGen {
         val others = deadEnds.drop(1).shuffled(rng)
         others[0].type = CellType.TREASURE
         others[1].type = CellType.SHOP
+        // Catedral: la Capilla de la ofrenda ocupa otro callejón sin salida si lo hay.
+        if (Biome.of(floor) == Biome.CATEDRAL && others.size >= 3) others[2].type = CellType.CAPILLA
 
         // Refugio a media distancia.
         val half = exit.dist / 2f

@@ -1,6 +1,13 @@
 package cl.xiombo.faro.render
 
 import cl.xiombo.faro.data.Balance
+import cl.xiombo.faro.data.Biome
+import cl.xiombo.faro.data.Story
+import cl.xiombo.faro.world.Campanero
+import cl.xiombo.faro.world.Cofrade
+import cl.xiombo.faro.world.Monaguillo
+import cl.xiombo.faro.world.Obispo
+import cl.xiombo.faro.world.Vela
 import cl.xiombo.faro.data.Meta
 import cl.xiombo.faro.data.Weapon
 import cl.xiombo.faro.world.Harpoon
@@ -434,9 +441,21 @@ class Renderer : Disposable {
         font.color = Color.WHITE
     }
 
+    /** Colores de la sala según el bioma (§10). */
+    private class RoomPal(
+        val void: Color, val wall: Color, val wallTop: Color, val floor: Color, val floor2: Color,
+        val seam: Color, val door: Color,
+    )
+    private val palMuelle = RoomPal(Pal.VOID, Pal.WALL, Pal.WALL_TOP, Pal.PLANK, Pal.PLANK2, Pal.SEAM, Pal.DOOR)
+    private val palCatedral = RoomPal(Pal.CAT_VOID, Pal.CAT_WALL, Pal.CAT_WALL_TOP, Pal.CAT_FLOOR, Pal.CAT_FLOOR2, Pal.CAT_SEAM, Pal.CAT_DOOR)
+    private var rp = palMuelle
+    private var catFloor = false
+
     private fun drawScene(w: World, a: Float) {
+        catFloor = !w.inSanctuary && w.biome == Biome.CATEDRAL
+        rp = if (catFloor) palCatedral else palMuelle
         scene.begin()
-        Gdx.gl.glClearColor(Pal.VOID.r, Pal.VOID.g, Pal.VOID.b, 1f)
+        Gdx.gl.glClearColor(rp.void.r, rp.void.g, rp.void.b, 1f)
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
         Gdx.gl.glEnable(GL20.GL_BLEND)
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA)
@@ -444,6 +463,7 @@ class Renderer : Disposable {
         shapes.projectionMatrix = cam.combined
         shapes.begin(ShapeType.Filled)
         drawRoom(w)
+        drawCatedral(w)
         if (w.brea) {
             col(Pal.BREA, 0.55f)
             shapes.rect(0f, 0f, w.room.width.toFloat(), w.room.height.toFloat())
@@ -532,6 +552,13 @@ class Renderer : Disposable {
                 shapes.circle(e.bubbleX, e.bubbleY, Sirena.EMERGE_R * k, 24)
             }
         }
+        for (wv in w.waves) {
+            val k = 1f - wv.t / wv.maxT
+            col(Pal.LILAC, 1f - k)
+            shapes.circle(wv.x, wv.y, wv.r * k, 28)
+            col(Pal.VIOLET, 0.6f * (1f - k))
+            shapes.circle(wv.x, wv.y, wv.r * k * 0.8f, 24)
+        }
         for (r in w.fx.rings) {
             col(r.color, r.t / r.maxT)
             shapes.circle(r.x, r.y, r.r * (1.2f - 0.2f * r.t / r.maxT), 24)
@@ -549,10 +576,10 @@ class Renderer : Disposable {
             val y = ty * t
             when (r.tileAt(tx, ty)) {
                 Room.WALL, Room.CRACK -> {
-                    col(Pal.WALL)
+                    col(rp.wall)
                     shapes.rect(x, y, t, t)
                     if (!r.isSolidTile(tx, ty + 1) || ty == r.rows - 1) {
-                        col(Pal.WALL_TOP)
+                        col(rp.wallTop)
                         shapes.rect(x, y + t - 3f, t, 3f)
                     }
                     if (ty > 0 && !r.isSolidTile(tx, ty - 1)) {
@@ -566,9 +593,50 @@ class Renderer : Disposable {
                         shapes.rect(x + 5f, y + 7f, 1f, 3f)
                         shapes.rect(x + 6f, y + 9f, 2f, 1f)
                         shapes.rect(x + 9f, y + 5f, 1f, 5f)
-                        col(Pal.WALL_TOP, 0.6f)
+                        col(rp.wallTop, 0.6f)
                         shapes.rect(x + 10f, y + 4f, 1f, 2f)
                     }
+                }
+                Room.GLASS -> {
+                    // Vitral: plomos oscuros y vidrio de colores; agrietado parpadea en blanco.
+                    val crack = r.crackOf(tx, ty)
+                    col(Pal.CAT_WALL)
+                    shapes.rect(x, y, t, t)
+                    val hue = (tx * 7 + ty * 3) % 4
+                    val a = if (hue == 0) Pal.GLASS_TEAL else if (hue == 1) Pal.VIOLET else if (hue == 2) Pal.GLASS_TEAL else Pal.CORAL_RED
+                    val b = if (hue == 2) Pal.GLASS_LIGHT else Pal.LILAC
+                    col(a); shapes.rect(x + 1f, y + 1f, 6f, 6f); shapes.rect(x + 9f, y + 9f, 6f, 6f)
+                    col(b); shapes.rect(x + 9f, y + 1f, 6f, 6f); shapes.rect(x + 1f, y + 9f, 6f, 6f)
+                    if (crack >= 0f) {
+                        val fast = crack < 0.5f
+                        val on = ((w.time * if (fast) 14f else 6f).toInt() % 2 == 0)
+                        col(Pal.CREAM, if (on) 0.85f else 0.45f)
+                        shapes.rect(x + 3f, y + 7f, 10f, 1f)
+                        shapes.rect(x + 7f, y + 2f, 1f, 12f)
+                        shapes.rect(x + 4f, y + 11f, 1f, 3f)
+                        shapes.rect(x + 11f, y + 3f, 1f, 3f)
+                    }
+                }
+                Room.HOLE -> {
+                    col(Pal.CAT_VOID)
+                    shapes.rect(x, y, t, t)
+                    if (r.tileAt(tx, ty + 1) != Room.HOLE) {
+                        col(Pal.CAT_WALL_TOP)
+                        shapes.rect(x, y + t - 2f, t, 2f)
+                    }
+                    col(Pal.GLASS_TEAL, 0.5f)
+                    shapes.rect(x + 3f + (tx % 3), y + 4f, 2f, 1f)
+                }
+                Room.CANDLE -> {
+                    drawPlank(tx, ty, x, y, t)
+                }
+                Room.CORAL -> {
+                    drawPlank(tx, ty, x, y, t)
+                    outlined(x + 1f, y + 1f, t - 2f, t - 3f, Pal.CORAL_RED)
+                    col(Pal.CORAL_PINK)
+                    shapes.rect(x + 3f, y + 6f, 3f, 6f)
+                    shapes.rect(x + 9f, y + 4f, 3f, 8f)
+                    shapes.rect(x + 6f, y + 10f, 3f, 3f)
                 }
                 Room.WATER -> {
                     col(Pal.WATER)
@@ -586,9 +654,9 @@ class Renderer : Disposable {
                 Room.DOOR -> {
                     drawPlank(tx, ty, x, y, t)
                     if (!r.doorsOpen) {
-                        col(Pal.SEAM)
+                        col(rp.seam)
                         shapes.rect(x + 1f, y + 1f, t - 2f, t - 2f)
-                        col(Pal.DOOR)
+                        col(rp.door)
                         val vertical = tx == 0 || tx == r.cols - 1
                         for (i in 0 until 3) {
                             if (vertical) shapes.rect(x + 3f + i * 4f, y, 2f, t) else shapes.rect(x, y + 3f + i * 4f, t, 2f)
@@ -600,8 +668,84 @@ class Renderer : Disposable {
         }
     }
 
-    /** Tablones del muelle: dos tablas por tile con juntas desfasadas. */
+    /** Candelabros, columnas de luz del Obispo y avisos del coral. */
+    private fun drawCatedral(w: World) {
+        for (c in w.candles) {
+            val x = c.x
+            val y = c.y - 7f
+            col(Pal.SHADOW)
+            shapes.ellipse(x - 6f, y - 3f, 12f, 4f)
+            outlined(x - 4f, y - 2f, 8f, 3f, Pal.STONE)
+            outlined(x - 1f, y + 1f, 2f, 11f, Pal.STONE)
+            outlined(x - 6f, y + 12f, 12f, 2f, Pal.BONE)
+            for (k in arrayOf(-4f, 0f, 4f)) {
+                col(Pal.BONE)
+                shapes.rect(x + k - 1f, y + 14f, 2f, 3f)
+                if (c.lit) {
+                    val fl = ((w.time * 12f + k + c.x).toInt() % 2).toFloat()
+                    col(Pal.LAMP)
+                    shapes.rect(x + k - 1f, y + 17f, 2f, 2f + fl)
+                    col(Pal.LAMP_HI)
+                    shapes.rect(x + k - 0.5f, y + 17f, 1f, 1f)
+                } else {
+                    col(Pal.SEAM)
+                    shapes.rect(x + k - 0.5f, y + 17f, 1f, 1f)
+                }
+            }
+        }
+        val o = w.boss as? Obispo ?: return
+        if (o.killed) return
+        val h = w.room.height.toFloat()
+        if (o.columnsOn) {
+            for (cx in o.colX) {
+                col(Pal.LAMP_HI, 0.14f)
+                shapes.rect(cx - Obispo.COL_W / 2f, 0f, Obispo.COL_W, h)
+                col(Pal.LAMP_HI, 0.35f)
+                shapes.rect(cx - Obispo.COL_W / 2f, 0f, 1f, h)
+                shapes.rect(cx + Obispo.COL_W / 2f - 1f, 0f, 1f, h)
+            }
+            if (o.colWarnT > 0f) {
+                val on = (w.time * 10f).toInt() % 2 == 0
+                for (tx in o.colTo) {
+                    col(Pal.LAMP_HI, if (on) 0.6f else 0.3f)
+                    shapes.rect(tx - 0.5f, 0f, 1f, h)
+                }
+            }
+        }
+        val depth = w.coralWarnDepth
+        if (depth > 0) {
+            val t = Balance.TILE.toFloat()
+            val r = w.room
+            val on = (w.time * 10f).toInt() % 2 == 0
+            col(Pal.CORAL_PINK, if (on) 0.55f else 0.3f)
+            val x0 = depth * t
+            val y0 = depth * t
+            val x1 = (r.cols - depth) * t
+            val y1 = (r.rows - depth) * t
+            shapes.rect(x0, y0, x1 - x0, t)
+            shapes.rect(x0, y1 - t, x1 - x0, t)
+            shapes.rect(x0, y0, t, y1 - y0)
+            shapes.rect(x1 - t, y0, t, y1 - y0)
+        }
+        if (o.act == Obispo.Act.SWEEP_TELE) {
+            val k = 1f - o.actT / o.actMax
+            col(Pal.CORAL_PINK, 0.18f + 0.3f * k)
+            val deg = o.sweepA * MathUtils.radiansToDegrees
+            shapes.arc(o.x, o.y, Obispo.SWEEP_R, deg - 90f, 180f, 18)
+        }
+    }
+
+    /** Tablones del muelle (o losas de la catedral): juntas desfasadas. */
     private fun drawPlank(tx: Int, ty: Int, x: Float, y: Float, t: Float) {
+        if (catFloor) {
+            col(if ((tx + ty) % 2 == 0) rp.floor else rp.floor2)
+            shapes.rect(x, y, t, t)
+            col(rp.seam)
+            shapes.rect(x, y, t, 1f)
+            shapes.rect(x, y, 1f, t)
+            if ((tx * 5 + ty * 3) % 7 == 0) { col(Pal.CORAL_RED, 0.35f); shapes.rect(x + 4f, y + 5f, 3f, 2f) }
+            return
+        }
         col(if ((tx + ty) % 2 == 0) Pal.PLANK else Pal.PLANK2)
         shapes.rect(x, y, t, t)
         col(Pal.SEAM)
@@ -689,6 +833,16 @@ class Renderer : Disposable {
                 outlined(x - 3f, y + 4f + bob, 6f, 6f, p.exvoto!!.rarity.color)
                 col(p.exvoto!!.tag.color)
                 shapes.rect(x - 2f, y + 5f + bob, 4f, 4f)
+            }
+            PedKind.OFRENDA_MAX, PedKind.OFRENDA_MITAD -> {
+                // Altar de piedra con el exvoto encima; la mancha de color dice qué pide.
+                outlined(x - 8f, y - 6f, 16f, 9f, Pal.STONE)
+                col(if (p.kind == PedKind.OFRENDA_MAX) Pal.CORAL_RED else Pal.LAMP_DIM)
+                shapes.rect(x - 6f, y - 4f, 12f, 2f)
+                val e = p.exvoto!!
+                outlined(x - 3f, y + 6f + bob, 6f, 6f, e.rarity.color)
+                col(e.tag.color)
+                shapes.rect(x - 2f, y + 7f + bob, 4f, 4f)
             }
             else -> {
                 outlined(x - 6f, y - 6f, 12f, 8f, Pal.WALL_TOP)
@@ -842,6 +996,7 @@ class Renderer : Disposable {
         val blink = (w.time * 16f).toInt() % 2 == 0
 
         if (e is Sirena) { drawSirena(w, e, x, y, flash, blink); return }
+        if (e is Obispo) { drawObispo(w, e, x, y, flash, blink); return }
 
         col(Pal.SHADOW)
         shapes.ellipse(x - e.hw, y - e.hh - 2f, e.hw * 2f, 5f)
@@ -908,6 +1063,81 @@ class Renderer : Disposable {
                     outlined(cx.roundToInt() - 2f, cy.roundToInt() - 2f, 4f, 4f, clawCol)
                 }
             }
+            is Monaguillo -> {
+                // Túnica de sal y cabeza; al apuntar, tres cristales brillan delante.
+                val c = if (flash) Color.WHITE else Pal.SALADO
+                outlined(x - 5f, y - 6f, 10f, 10f, c)
+                outlined(x - 3f, y + 4f, 6f, 5f, Pal.SKIN)
+                col(Pal.OUTLINE)
+                shapes.rect(x - 1f, y + 6f, 1f, 1f); shapes.rect(x + 1f, y + 6f, 1f, 1f)
+                col(Pal.LILAC)
+                shapes.rect(x - 5f, y - 1f, 10f, 1f)
+                if (tele) {
+                    for (i in -1..1) {
+                        val a = e.aimA + i * Monaguillo.SPREAD
+                        col(if (blink) Pal.CREAM else Pal.GLASS_LIGHT)
+                        shapes.rect(x + cos(a) * 10f - 1.5f, y + sin(a) * 10f - 1.5f, 3f, 3f)
+                    }
+                    col(Pal.CREAM, 0.25f)
+                    shapes.rectLine(x, y, x + cos(e.aimA) * 60f, y + sin(e.aimA) * 60f, 1f)
+                }
+            }
+            is Campanero -> {
+                // Encorvado, con la campana: la levanta durante el aviso.
+                val c = if (flash) Color.WHITE else Pal.VIOLET
+                outlined(x - 7f, y - 8f, 14f, 13f, c)
+                outlined(x - 4f, y + 5f, 8f, 5f, Pal.LILAC)
+                col(Pal.OUTLINE)
+                shapes.rect(x - 2f, y + 7f, 1f, 1f); shapes.rect(x + 1f, y + 7f, 1f, 1f)
+                val lift = if (tele) 8f + (1f - e.stateT / e.def.telegraph) * 4f else 0f
+                val bx = x + 7f
+                val by = y - 2f + lift
+                col(Pal.OUTLINE)
+                shapes.triangle(bx - 6f, by - 4f, bx + 6f, by - 4f, bx, by + 6f)
+                col(if (tele && blink) Pal.LAMP_HI else Pal.STONE)
+                shapes.triangle(bx - 5f, by - 3f, bx + 5f, by - 3f, bx, by + 5f)
+                col(Pal.LAMP_DIM)
+                shapes.rect(bx - 1f, by - 5f, 2f, 2f)
+                if (tele) {
+                    col(Pal.LILAC, 0.25f)
+                    shapes.circle(x, y, Campanero.WAVE_R * (1f - e.stateT / e.def.telegraph), 28)
+                }
+            }
+            is Vela -> {
+                val c = if (flash) Color.WHITE else Pal.BONE
+                val bob = sin(e.anim * 6f) * 1.5f
+                outlined(x - 3f, y - 5f + bob, 6f, 9f, c)
+                val big = if (!tele) 0f else if (blink) 3f else 2f
+                col(Pal.LAMP)
+                shapes.rect(x - 2f, y + 4f + bob, 4f, 4f + big)
+                col(Pal.LAMP_HI)
+                shapes.rect(x - 1f, y + 5f + bob, 2f, 2f + big)
+                if (tele) {
+                    col(Pal.LAMP, 0.4f)
+                    shapes.rectLine(x, y, x + e.dirX * 40f, y + e.dirY * 40f, 1f)
+                }
+            }
+            is Cofrade -> {
+                // Encapuchado de coral arrastrando una cruz; aviso: raya rosada de 64 px en el suelo.
+                if (tele) {
+                    col(Pal.CORAL_PINK, if (blink) 0.75f else 0.45f)
+                    shapes.rectLine(x, y - 6f, x + e.dirX * e.def.range, y - 6f + e.dirY * e.def.range, 3f)
+                }
+                val c = if (flash) Color.WHITE else Pal.CORAL_RED
+                outlined(x - 8f, y - 8f, 16f, 15f, c)
+                outlined(x - 5f, y + 6f, 10f, 6f, Pal.CORAL_PINK)
+                col(Pal.OUTLINE)
+                shapes.rect(x - 3f, y + 8f, 6f, 2f)
+                val cx = x + 10f
+                outlined(cx - 1f, y - 9f, 3f, 18f, Pal.BONE)
+                outlined(cx - 4f, y + 3f, 9f, 3f, Pal.BONE)
+            }
+        }
+        if (e.shielded) {
+            col(Pal.BENDECIDO, if (blink) 0.75f else 0.5f)
+            shapes.rect(x - e.hw - 4f, y + e.hh + 2f, e.hw * 2f + 8f, 1f)
+            shapes.rect(x - e.hw - 4f, y - e.hh - 3f, 1f, e.hh * 2f + 6f)
+            shapes.rect(x + e.hw + 3f, y - e.hh - 3f, 1f, e.hh * 2f + 6f)
         }
 
         if (e.stunned) {
@@ -930,6 +1160,45 @@ class Renderer : Disposable {
             shapes.rect(x - 8f, y + e.hh + 5f, 16f, 3f)
             col(if (affix != null) affix.color else Pal.CORAL)
             shapes.rect(x - 7f, y + e.hh + 6f, 14f * (e.hp / e.maxHp), 1f)
+        }
+    }
+
+    /** El Obispo Coral: casulla violeta, mitra de hueso con coral y báculo. */
+    private fun drawObispo(w: World, o: Obispo, x: Float, y: Float, flash: Boolean, blink: Boolean) {
+        col(Pal.SHADOW)
+        shapes.ellipse(x - 14f, y - 15f, 28f, 7f)
+        val robe = if (flash) Color.WHITE else Pal.VIOLET
+        outlined(x - 11f, y - 13f, 22f, 20f, robe)
+        col(Pal.LILAC)
+        shapes.rect(x - 2f, y - 13f, 4f, 20f)
+        col(Pal.CORAL_RED)
+        shapes.rect(x - 9f, y - 11f, 3f, 4f)
+        shapes.rect(x + 6f, y - 6f, 3f, 5f)
+        outlined(x - 5f, y + 7f, 10f, 7f, Pal.SKIN)
+        col(Pal.OUTLINE)
+        shapes.rect(x - 2f, y + 10f, 1f, 1f); shapes.rect(x + 2f, y + 10f, 1f, 1f)
+        // Mitra
+        col(Pal.OUTLINE)
+        shapes.triangle(x - 7f, y + 13f, x + 7f, y + 13f, x, y + 27f)
+        col(if (o.act == Obispo.Act.ROAR && blink) Pal.LAMP_HI else Pal.BONE)
+        shapes.triangle(x - 6f, y + 14f, x + 6f, y + 14f, x, y + 25f)
+        col(Pal.CORAL_PINK)
+        shapes.rect(x + 2f, y + 18f, 2f, 3f)
+        // Báculo: se alza durante el aviso.
+        val raise = if (o.act == Obispo.Act.SWEEP_TELE) 6f else 0f
+        val sx = x - 14f
+        outlined(sx - 1f, y - 12f + raise, 3f, 30f, Pal.STONE)
+        outlined(sx - 3f, y + 16f + raise, 7f, 4f, if (o.act == Obispo.Act.SWEEP_TELE && blink) Pal.LAMP_HI else Pal.CORAL_RED)
+        if (o.act == Obispo.Act.SWEEP) {
+            col(Pal.CREAM, 0.8f)
+            val deg = o.sweepA * MathUtils.radiansToDegrees
+            shapes.arc(x, y, Obispo.SWEEP_R, deg - 90f, 180f, 18)
+        }
+        if (o.stunned) {
+            val t = w.time * 6f
+            col(Pal.LAMP_HI)
+            shapes.rect(x + cos(t) * 8f - 1f, y + 30f + sin(t) * 2f, 2f, 2f)
+            shapes.rect(x - cos(t) * 8f - 1f, y + 30f - sin(t) * 2f, 2f, 2f)
         }
     }
 
@@ -1018,6 +1287,7 @@ class Renderer : Disposable {
                 PedKind.ESCALERA -> light(ped.x, ped.y, 30f, 0.5f)
                 PedKind.VIGILIA -> light(ped.x, ped.y + 22f, if (ped.taken) 46f else 84f, 1f)
                 PedKind.DESCENSO -> light(ped.x, ped.y, 46f, 0.8f)
+                PedKind.OFRENDA_MAX, PedKind.OFRENDA_MITAD -> if (!ped.taken) light(ped.x, ped.y + 8f, 34f, 0.8f)
                 else -> if (!ped.taken) light(ped.x, ped.y + 6f, 26f, 0.7f)
             }
         }
@@ -1031,6 +1301,16 @@ class Renderer : Disposable {
         if (p.swingActive && p.weapon == Weapon.FAROL) light(p.cx + p.atkDx * 18f, p.cy + p.atkDy * 18f, 26f, 0.5f)
         p.harpoon?.let { light(it.x, it.y, 14f, 0.5f) }
         for (b in w.fx.blasts) light(b.x, b.y, b.r * 2.2f * (b.t / b.maxT), 1f)
+        for (c in w.candles) if (c.lit) {
+            val fl = 1f + 0.04f * sin(w.time * 9f + c.x)
+            light(c.x, c.y + 6f, World.CANDLE_LIGHT * fl * min(1f, 0.4f + c.litT * 3f), 0.95f)
+        }
+        (w.boss as? Obispo)?.let { o ->
+            if (o.columnsOn && !o.killed) for (cx in o.colX) {
+                var y = 8f
+                while (y < w.room.height) { light(cx, y, 30f, 0.55f); y += 28f }
+            }
+        }
 
         batch.end()
         batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA)
@@ -1088,6 +1368,19 @@ class Renderer : Disposable {
         if (w.fadeT > 0f) {
             col(Color.BLACK, (w.fadeT / World.FADE).coerceIn(0f, 1f))
             shapes.rect(0f, 0f, iw.toFloat(), ih.toFloat())
+        }
+        if (w.chapter != null && w.chapterT > 0f) {
+            val k = min(1f, w.chapterT / 0.8f) * min(1f, (World.CHAPTER_TIME - w.chapterT) / 0.6f)
+            col(Pal.OUTLINE, 0.55f * k)
+            shapes.rect(0f, ih * 0.6f, iw.toFloat(), ih * 0.2f)
+        }
+        if (w.memory != null && w.memoryT > 0f && w.mode == World.Mode.PLAYING) {
+            val k = min(1f, w.memoryT / 1f) * min(1f, (World.MEMORY_TIME - w.memoryT) / 0.8f)
+            // Arriba, para no tapar a Isla ni la recompensa del jefe.
+            col(Pal.NIGHT, 0.88f * k)
+            shapes.rect(40f, 138f, iw - 80f, 66f)
+            col(Pal.LAMP_DIM, k)
+            shapes.rect(40f, 203f, iw - 80f, 1f)
         }
 
         if (w.inSanctuary) {
@@ -1189,6 +1482,7 @@ class Renderer : Disposable {
                     CellType.ELITE -> if (c.cleared) null else Pal.HAMBRIENTO
                     CellType.SECRET -> Pal.MEDUSA
                     CellType.ANTESALA -> Pal.LAMP_DIM
+                    CellType.CAPILLA -> if (c.pedestals.any { !it.taken } || !c.stocked) Pal.LILAC else null
                     else -> null
                 }
                 if (icon != null) {
@@ -1201,7 +1495,7 @@ class Renderer : Disposable {
 
     private fun drawBossBar(w: World) {
         val b = w.boss ?: return
-        if (b.killed || b.act == Sirena.Act.INTRO && b.actT > 1.2f) return
+        if (b.killed || !b.introduced) return
         val bwid = 240f
         val x = (iw - bwid) / 2f
         val y = 12f
@@ -1211,10 +1505,10 @@ class Renderer : Disposable {
         shapes.rect(x, y, bwid, 4f)
         col(Pal.CORAL)
         shapes.rect(x, y, bwid * (b.hp / b.maxHp), 4f)
-        // Marcas de fase: 60 % y 25 %
+        // Marcas de fase
         col(Pal.CREAM)
-        shapes.rect(x + bwid * 0.6f, y, 1f, 4f)
-        shapes.rect(x + bwid * 0.25f, y, 1f, 4f)
+        val marks = if (b is Sirena) floatArrayOf(0.6f, 0.25f) else b.phaseMarks
+        for (m in marks) shapes.rect(x + bwid * m, y, 1f, 4f)
     }
 
     private fun drawScreenSpace(w: World, c: Controls) {
@@ -1242,7 +1536,23 @@ class Renderer : Disposable {
             text(w.banner, iw / 2f, ih * 0.80f, Pal.LAMP, alpha = w.bannerT.coerceIn(0f, 1f), align = 0)
         }
         w.boss?.let { b ->
-            if (!b.killed) text("LA SIRENA DE BREA", iw / 2f, 30f, Pal.CREAM, align = 0)
+            if (!b.killed && b.introduced) text(b.def.name.uppercase(), iw / 2f, 30f, Pal.CREAM, align = 0)
+        }
+        // Título de capítulo al empezar un bioma.
+        w.chapter?.let { (title, line) ->
+            if (w.chapterT > 0f) {
+                val k = min(1f, w.chapterT / 0.8f) * min(1f, (World.CHAPTER_TIME - w.chapterT) / 0.6f)
+                text(title, iw / 2f, ih * 0.74f, Pal.LAMP, alpha = k, align = 0)
+                text(line, iw / 2f, ih * 0.66f, Pal.CREAM, alpha = k, align = 0, wrap = iw * 0.8f)
+            }
+        }
+        // Recuerdo del jefe (solo la primera vez que cae).
+        w.memory?.let { m ->
+            if (w.memoryT > 0f && w.mode == World.Mode.PLAYING) {
+                val k = min(1f, w.memoryT / 1f) * min(1f, (World.MEMORY_TIME - w.memoryT) / 0.8f)
+                text(m.title, iw / 2f, 194f, Pal.LAMP_HI, alpha = k, align = 0)
+                text(m.text, iw / 2f, 180f, Pal.CREAM, alpha = k, align = 0, wrap = iw * 0.78f)
+            }
         }
         val it = w.interactable
         if (it != null && w.mode == World.Mode.PLAYING) {
@@ -1274,10 +1584,10 @@ class Renderer : Disposable {
             World.Mode.VICTORY -> {
                 val mm = (w.time / 60f).toInt()
                 val ss = (w.time % 60f).toInt()
-                text("MUELLE AHOGADO COMPLETADO", iw / 2f, ih * 0.74f, Pal.LAMP, align = 0)
+                text("${w.biome.label} COMPLETADA", iw / 2f, ih * 0.74f, Pal.LAMP, align = 0)
                 text("Tiempo ${mm}:${ss.toString().padStart(2, '0')}  ·  ${w.kills} bajas  ·  ${w.owned.size} exvotos", iw / 2f, ih * 0.62f, Pal.CREAM, align = 0)
                 text("Perlas +${w.perlasRun}   (total ${Meta.perlas})", iw / 2f, ih * 0.54f, Pal.SHELL, align = 0)
-                text("La Catedral Sumergida llega en la F2.", iw / 2f, ih * 0.42f, Pal.CREAM, align = 0)
+                text(Story.VICTORIA_F2, iw / 2f, ih * 0.42f, Pal.CREAM, align = 0)
                 if (w.modeT > 1.8f) text(anyKeyText(c, "volver al Santuario"), iw / 2f, ih * 0.32f, Pal.LAMP_HI, align = 0)
             }
             else -> {}

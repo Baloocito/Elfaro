@@ -46,5 +46,28 @@
   ],
   "grande_v": [
     "grande_v_torre.tmx"
+  ],
+  "cat_combate": [
+    "cat_combate_nave.tmx",
+    "cat_combate_roseton.tmx",
+    "cat_combate_candelabros.tmx",
+    "cat_combate_bancos.tmx",
+    "cat_combate_cruz.tmx",
+    "cat_combate_claustro.tmx",
+    "cat_combate_coro.tmx",
+    "cat_combate_pila.tmx",
+    "cat_combate_capillas.tmx",
+    "cat_combate_escalinata.tmx",
+    "cat_combate_cripta.tmx",
+    "cat_combate_vitrales_rotos.tmx",
+    "cat_combate_altar_mayor.tmx",
+    "cat_combate_columnata.tmx",
+    "cat_combate_puente.tmx"
+  ],
+  "capilla": [
+    "capilla_ofrenda.tmx"
+  ],
+  "cat_jefe": [
+    "cat_jefe_obispo.tmx"
   ]
 }

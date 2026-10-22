@@ -28,6 +28,8 @@ enum class Affix(val label: String, val color: Color) {
     BRILLANTE("Brillante", Pal.BRILLANTE),
     GEMELO("Gemelo", Pal.GEMELO),
     HAMBRIENTO("Hambriento", Pal.HAMBRIENTO),
+    /** Catedral: un escudo absorbe el primer golpe cada 4 s (cualquier golpe lo rompe). */
+    BENDECIDO("Bendecido", Pal.BENDECIDO),
 }
 
 fun createEnemy(id: String, x: Float, y: Float, floor: Int, affix: Affix? = null): Enemy {
@@ -37,6 +39,11 @@ fun createEnemy(id: String, x: Float, y: Float, floor: Int, affix: Affix? = null
         "medusa" -> Medusa(def, x, y, floor, affix)
         "cangrejo" -> Cangrejo(def, x, y, floor, affix)
         "sirena" -> Sirena(def, x, y)
+        "monaguillo" -> Monaguillo(def, x, y, floor, affix)
+        "campanero" -> Campanero(def, x, y, floor, affix)
+        "vela" -> Vela(def, x, y, floor, affix)
+        "cofrade" -> Cofrade(def, x, y, floor, affix)
+        "obispo" -> Obispo(def, x, y)
         else -> error("Enemigo desconocido: $id")
     }
 }
@@ -45,6 +52,10 @@ abstract class Enemy(val def: EnemyDef, x: Float, y: Float, val floor: Int, val 
     Body(x, y, def.hw, def.hh) {
     val isElite = affix != null
     open val isBoss: Boolean get() = false
+    /** Jefes: la barra de vida aparece cuando termina la presentación. */
+    open val introduced: Boolean get() = true
+    /** Jefes: marcas de fase en la barra (fracción de vida). */
+    open val phaseMarks: FloatArray get() = FloatArray(0)
 
     val maxHp = def.hp * Balance.hpMul(floor) * (if (affix != null) 2.5f else 1f)
     var hp = maxHp
@@ -82,6 +93,9 @@ abstract class Enemy(val def: EnemyDef, x: Float, y: Float, val floor: Int, val 
     protected fun tgtY(w: World) = if (lost) lostY else w.targetY
     var split = false
     private var puddleT = 0f
+    /** Bendecido: segundos hasta que vuelve el escudo (<= 0 = escudo puesto). */
+    var shieldCd = 0f
+    val shielded get() = affix == Affix.BENDECIDO && shieldCd <= 0f && !killed
 
     /** killed: ya soltó Luz y cuenta como baja. dead: se retira de la lista. */
     var killed = false
@@ -103,6 +117,7 @@ abstract class Enemy(val def: EnemyDef, x: Float, y: Float, val floor: Int, val 
         flash -= dt
         slowT -= dt
         stunImmuneT -= dt
+        shieldCd -= dt
         if (stunT > 0f) {
             stunT -= dt
             if (stunT <= 0f) stunImmuneT = 2f
@@ -145,6 +160,14 @@ abstract class Enemy(val def: EnemyDef, x: Float, y: Float, val floor: Int, val 
     open fun takeHit(w: World, amount: Float, fromX: Float, fromY: Float, kind: HitKind): Boolean {
         if (!targetable) return false
         if (kind != HitKind.BURN) lost = false
+        if (shielded) {
+            // El escudo se lleva el golpe entero, sea cual sea.
+            shieldCd = 4f
+            flash = 0.08f
+            w.fx.ring(x, y, radius + 6f, Pal.BENDECIDO)
+            w.fx.burst(x, y, 8, Pal.BENDECIDO, 80f, 0.3f)
+            return true
+        }
         hp -= if (stunned) amount * 1.25f else amount
         when (kind) {
             HitKind.MELEE, HitKind.BLAST, HitKind.SLAM, HitKind.LAMP -> flash = 0.1f

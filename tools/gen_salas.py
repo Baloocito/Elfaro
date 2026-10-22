@@ -4,7 +4,8 @@
 Uso: python3 tools/gen_salas.py
 
 Validación: con las 4 puertas abiertas, todas las apariciones (S) y pedestales (P)
-deben ser alcanzables a pie desde cualquier puerta (el agua y los muros bloquean).
+deben ser alcanzables a pie desde cualquier puerta (el agua, los muros y los candelabros
+bloquean; el vitral se pisa).
 """
 import json
 import os
@@ -15,8 +16,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "tools", "salas.txt")
 OUT = os.path.join(ROOT, "assets", "rooms")
 
-WALL, WATER, SPAWN, PEDESTAL = 1, 2, 3, 4
-SIZES = {"jefe": (30, 17), "grande_h": (52, 14), "grande_v": (26, 28)}
+WALL, WATER, SPAWN, PEDESTAL, GLASS, CANDLE = 1, 2, 3, 4, 5, 6
+SIZES = {"jefe": (30, 17), "cat_jefe": (30, 17), "grande_h": (52, 14), "grande_v": (26, 28)}
 DEFAULT = (26, 14)
 
 
@@ -57,6 +58,8 @@ def build(room):
             x = j + 1
             if ch == "#": terrain[y][x] = WALL
             elif ch == "~": terrain[y][x] = WATER
+            elif ch == "V": terrain[y][x] = GLASS
+            elif ch == "K": terrain[y][x] = CANDLE
             elif ch == "S": marks[y][x] = SPAWN
             elif ch == "P": marks[y][x] = PEDESTAL
             elif ch != ".": errs.append(f"carácter desconocido '{ch}'")
@@ -86,7 +89,8 @@ def door_tiles(cols, rows):
 
 
 def validate(cols, rows, terrain, marks):
-    t = [row[:] for row in terrain]
+    # El vitral se pisa (cuenta como suelo para la validación).
+    t = [[0 if v == GLASS else v for v in row] for row in terrain]
     doors = door_tiles(cols, rows)
     for tiles in doors.values():
         for x, y in tiles:
@@ -109,8 +113,8 @@ def validate(cols, rows, terrain, marks):
         for x in range(cols):
             if marks[y][x] and (x, y) not in seen:
                 errs.append(f"marcador en ({x},{y}) inalcanzable")
-            if marks[y][x] and terrain[y][x]:
-                errs.append(f"marcador sobre muro/agua en ({x},{y})")
+            if marks[y][x] and terrain[y][x] and not (terrain[y][x] == GLASS and marks[y][x] == SPAWN):
+                errs.append(f"marcador sobre muro/agua/vitral en ({x},{y})")
     return errs
 
 
@@ -143,24 +147,28 @@ def tmx(name, kind, cols, rows, terrain, marks):
 
 
 TSX = '''<?xml version="1.0" encoding="UTF-8"?>
-<tileset version="1.10" tiledversion="1.11.0" name="muelle" tilewidth="16" tileheight="16" tilecount="4" columns="4">
- <image source="muelle.png" width="64" height="16"/>
+<tileset version="1.10" tiledversion="1.11.0" name="muelle" tilewidth="16" tileheight="16" tilecount="6" columns="6">
+ <image source="muelle.png" width="96" height="16"/>
  <tile id="0"><properties><property name="tipo" value="muro"/></properties></tile>
  <tile id="1"><properties><property name="tipo" value="agua"/></properties></tile>
  <tile id="2"><properties><property name="tipo" value="aparicion"/></properties></tile>
  <tile id="3"><properties><property name="tipo" value="pedestal"/></properties></tile>
+ <tile id="4"><properties><property name="tipo" value="vitral"/></properties></tile>
+ <tile id="5"><properties><property name="tipo" value="candelabro"/></properties></tile>
 </tileset>
 '''
 
 
 def tileset_png(path):
     from PIL import Image, ImageDraw
-    img = Image.new("RGBA", (64, 16), (0, 0, 0, 0))
+    img = Image.new("RGBA", (96, 16), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     d.rectangle([0, 0, 15, 15], fill="#2c3946"); d.rectangle([0, 0, 15, 2], fill="#4a5b6a")
     d.rectangle([16, 0, 31, 15], fill="#1b4a60"); d.line([19, 6, 25, 6], fill="#2f7590"); d.line([22, 11, 28, 11], fill="#2f7590")
     d.line([34, 2, 45, 13], fill="#e57a5c", width=2); d.line([45, 2, 34, 13], fill="#e57a5c", width=2)
     d.rectangle([52, 4, 59, 15], fill="#9b7a52"); d.rectangle([54, 1, 57, 4], fill="#ffb547")
+    d.rectangle([64, 0, 79, 15], fill="#3e6a78"); d.rectangle([66, 2, 71, 7], fill="#9fd6d0"); d.rectangle([72, 8, 77, 13], fill="#7a5aa0")
+    d.rectangle([86, 6, 89, 15], fill="#9b917a"); d.rectangle([84, 3, 91, 5], fill="#d8cfb4"); d.rectangle([87, 0, 88, 2], fill="#ffb547")
     img.save(path)
 
 

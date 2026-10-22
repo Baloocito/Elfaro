@@ -255,8 +255,8 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
             }
         } else {
             coyote = 0f
-            // Último punto seguro: lejos de cualquier borde de agua.
-            if (!room.boxTouchesWater(x, y, hw + 4f, hh + 4f)) { safeX = x; safeY = y }
+            // Último punto seguro: lejos del agua y de los vitrales (que pueden romperse después).
+            if (!room.boxTouchesWater(x, y, hw + 4f, hh + 4f) && !room.boxTouchesGlass(x, y, hw + 4f, hh + 4f)) { safeX = x; safeY = y }
         }
     }
 
@@ -363,6 +363,7 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
     private fun hitCone(w: World) {
         val cosHalf = cos(Math.toRadians(swingHalfAngleDeg.toDouble())).toFloat()
         val range = swingRange
+        w.igniteAt(cx + atkDx * range * 0.6f, cy + atkDy * range * 0.6f, range * 0.6f)
         for (e in w.enemies) {
             if (!e.targetable || e in swingHits) continue
             val dx = e.x - cx
@@ -403,6 +404,7 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
         }
         w.addShake(1f)
         w.bellAt(cx, cy, r)
+        w.igniteAt(cx, cy, r)
     }
 
     private fun throwHarpoon(w: World) {
@@ -421,7 +423,7 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
                 h.y += h.dy * step
                 h.traveled += step
                 if (w.room.isSolidAt(h.x, h.y) || h.traveled > HARPOON_RANGE) {
-                    if (w.room.isSolidAt(h.x, h.y)) { h.x -= h.dx * step; h.y -= h.dy * step }
+                    if (w.room.isSolidAt(h.x, h.y)) { w.igniteAt(h.x, h.y, 6f); h.x -= h.dx * step; h.y -= h.dy * step }
                     h.st = Harpoon.St.STUCK
                     w.fx.spark(h.x, h.y)
                     return
@@ -467,6 +469,7 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
     private fun updateHaz(w: World, dt: Float) {
         hazLen = w.room.rayLength(cx, cy, aimX, aimY, Balance.HAZ_MAX_LEN)
         if (w.room.isCrack(w.room.lastRayTx, w.room.lastRayTy)) w.openSecret()
+        w.igniteAt(cx + aimX * hazLen, cy + aimY * hazLen, 6f)
         val half = Balance.HAZ_WIDTH / 2f
         for (e in w.enemies) {
             if (!e.targetable) continue

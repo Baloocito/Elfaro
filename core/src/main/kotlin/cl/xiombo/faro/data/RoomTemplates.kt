@@ -24,6 +24,8 @@ class RoomTemplate(
 object RoomTemplates {
     const val T_WALL = 1
     const val T_WATER = 2
+    const val T_GLASS = 5
+    const val T_CANDLE = 6
     const val M_SPAWN = 3
     const val M_PEDESTAL = 4
 
@@ -45,6 +47,7 @@ object RoomTemplates {
     }
 
     fun of(kind: String): List<RoomTemplate> = byKind[kind] ?: error("No hay plantillas de tipo $kind")
+    fun has(kind: String) = byKind.containsKey(kind)
 
     private fun parse(file: String): RoomTemplate {
         val root = XmlReader().parse(Gdx.files.internal("rooms/$file"))

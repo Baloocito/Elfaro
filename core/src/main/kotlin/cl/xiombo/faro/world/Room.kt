@@ -38,6 +38,15 @@ class Room(val template: RoomTemplate, val doors: Set<DoorSpec>, val crack: Door
         const val WATER = 2
         const val DOOR = 3
         const val CRACK = 4
+        /** Vitral: se pisa; al pisarlo se agrieta y 1,2 s después se rompe en un pozo (HOLE). */
+        const val GLASS = 5
+        /** Pozo del vitral roto: funciona como el agua (caes, los que caminan no lo cruzan). */
+        const val HOLE = 6
+        /** Candelabro: bloquea como un muro bajo; se enciende al golpearlo. */
+        const val CANDLE = 7
+        /** Coral: muro temporal (al morir un Cofrade) o el borde que crece en la arena del Obispo. */
+        const val CORAL = 8
+        const val GLASS_BREAK_TIME = 1.2f
     }
 
     val cols = template.cols
@@ -51,7 +60,15 @@ class Room(val template: RoomTemplate, val doors: Set<DoorSpec>, val crack: Door
     val width = cols * TILE
     val height = rows * TILE
     private val tiles = IntArray(cols * rows)
+    /** Vitral agrietado: segundos que faltan para romperse (< 0 = intacto). */
+    private val crackT = FloatArray(cols * rows) { -1f }
+    /** Coral temporal: segundos hasta desaparecer (< 0 = permanente o sin coral). */
+    private val coralT = FloatArray(cols * rows) { -1f }
+    private val coralUnder = IntArray(cols * rows)
     var doorsOpen = true
+    /** Hay vitrales en la sala (para no recorrer la rejilla si no hace falta). */
+    var hasGlass = false
+        private set
 
     var lastRayTx = -1
         private set
@@ -63,6 +80,8 @@ class Room(val template: RoomTemplate, val doors: Set<DoorSpec>, val crack: Door
             tiles[i] = when (template.terrain[i]) {
                 RoomTemplates.T_WALL -> WALL
                 RoomTemplates.T_WATER -> WATER
+                RoomTemplates.T_GLASS -> GLASS.also { hasGlass = true }
+                RoomTemplates.T_CANDLE -> CANDLE
                 else -> FLOOR
             }
         }
@@ -110,12 +129,59 @@ class Room(val template: RoomTemplate, val doors: Set<DoorSpec>, val crack: Door
 
     fun isDoorGap(tx: Int, ty: Int) = tileAt(tx, ty) == DOOR
     fun isCrack(tx: Int, ty: Int) = tileAt(tx, ty) == CRACK
-    fun isWater(tx: Int, ty: Int) = tileAt(tx, ty) == WATER
+    fun isWater(tx: Int, ty: Int) = tileAt(tx, ty).let { it == WATER || it == HOLE }
+    fun isGlass(tx: Int, ty: Int) = tileAt(tx, ty) == GLASS
+    fun crackOf(tx: Int, ty: Int): Float = if (tx < 0 || ty < 0 || tx >= cols || ty >= rows) -1f else crackT[ty * cols + tx]
+
+    /** Pisar un vitral intacto lo agrieta. Devuelve true si empezó a agrietarse ahora. */
+    fun stepOn(x: Float, y: Float): Boolean {
+        val tx = floor(x / TILE).toInt()
+        val ty = floor(y / TILE).toInt()
+        if (tileAt(tx, ty) != GLASS) return false
+        val i = ty * cols + tx
+        if (crackT[i] >= 0f) return false
+        crackT[i] = GLASS_BREAK_TIME
+        return true
+    }
+
+    /** Avanza grietas y coral. Llama a [onBreak] por cada vitral que se rompe y [onCoralGone] por cada coral que desaparece. */
+    fun update(dt: Float, onBreak: (Int, Int) -> Unit, onCoralGone: (Int, Int) -> Unit) {
+        for (i in tiles.indices) {
+            if (crackT[i] >= 0f) {
+                crackT[i] -= dt
+                if (crackT[i] < 0f && tiles[i] == GLASS) {
+                    tiles[i] = HOLE
+                    crackT[i] = -1f
+                    onBreak(i % cols, i / cols)
+                }
+            }
+            if (coralT[i] >= 0f) {
+                coralT[i] -= dt
+                if (coralT[i] < 0f) {
+                    tiles[i] = coralUnder[i]
+                    onCoralGone(i % cols, i / cols)
+                }
+            }
+        }
+    }
+
+    /** Pone coral en un tile. [seconds] < 0 = para siempre. Solo sobre suelo o vitral. */
+    fun putCoral(tx: Int, ty: Int, seconds: Float): Boolean {
+        if (tx !in 0 until cols || ty !in 0 until rows) return false
+        val i = ty * cols + tx
+        val t = tiles[i]
+        if (t != FLOOR && t != GLASS && t != HOLE) return false
+        coralUnder[i] = if (t == HOLE) HOLE else FLOOR
+        tiles[i] = CORAL
+        coralT[i] = seconds
+        crackT[i] = -1f
+        return true
+    }
     fun isWaterAt(x: Float, y: Float) = isWater(floor(x / TILE).toInt(), floor(y / TILE).toInt())
 
     fun isSolidTile(tx: Int, ty: Int, water: Boolean = false): Boolean = when (tileAt(tx, ty)) {
-        WALL, CRACK -> true
-        WATER -> water
+        WALL, CRACK, CANDLE, CORAL -> true
+        WATER, HOLE -> water
         DOOR -> !doorsOpen
         else -> false
     }
@@ -130,6 +196,24 @@ class Room(val template: RoomTemplate, val doors: Set<DoorSpec>, val crack: Door
         val y1 = floor((cy + hh - 0.01f) / TILE).toInt()
         for (ty in y0..y1) for (tx in x0..x1) if (isSolidTile(tx, ty, water)) return true
         return false
+    }
+
+    /** ¿Toca la caja algún vitral (intacto o agrietado)? */
+    fun boxTouchesGlass(cx: Float, cy: Float, hw: Float, hh: Float): Boolean {
+        if (!hasGlass) return false
+        val x0 = floor((cx - hw) / TILE).toInt()
+        val x1 = floor((cx + hw - 0.01f) / TILE).toInt()
+        val y0 = floor((cy - hh) / TILE).toInt()
+        val y1 = floor((cy + hh - 0.01f) / TILE).toInt()
+        for (ty in y0..y1) for (tx in x0..x1) if (isGlass(tx, ty)) return true
+        return false
+    }
+
+    /** Tiles de candelabro (para crear sus objetos al entrar). */
+    fun candleTiles(): List<IntArray> {
+        val out = ArrayList<IntArray>()
+        for (i in tiles.indices) if (tiles[i] == CANDLE) out += intArrayOf(i % cols, i / cols)
+        return out
     }
 
     /** ¿Toca la caja algún tile de agua? */
