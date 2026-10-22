@@ -123,6 +123,7 @@ class Controls(private val renderer: Renderer) : InputAdapter() {
             Input.Keys.F7 -> if (renderer.debug) toggleVirtualPad = true
             Input.Keys.F3, Input.Keys.F4, Input.Keys.F5, Input.Keys.F6 ->
                 if (renderer.debug) state.debugCmd = keycode - Input.Keys.F3 + 3
+            Input.Keys.F8 -> if (renderer.debug) state.debugCmd = 8
         }
         return true
     }

@@ -67,7 +67,7 @@ F0 (prototipo de sensación) está completa: movimiento, Destello, Farol, Haz, l
 | Usar / comprar | E / Enter        | Botón USAR (aparece cerca)     | Y                           |
 | Pausa    | Esc / P                | Botón II o atrás               | Start / Select              |
 | Debug    | F1 cajas y FPS · F2 luz on/off | —                      | —                           |
-| Con F1   | F3 carta y Luz llena · F4 ir al jefe · F5 exvoto (en el Santuario: +50 Perlas y todas las armas) · F6 150 de daño · F7 mando virtual (teclas 1–0) | — | — |
+| Con F1   | F3 carta y Luz llena · F4 ir al jefe · F5 exvoto (en el Santuario: +50 Perlas y todas las armas) · F6 150 de daño · F8 Isla recibe 40 · F7 mando virtual (teclas 1–0) | — | — |
 
 **Mando:** se conecta por Bluetooth en los ajustes del teléfono y el juego lo detecta solo.
 Al usarlo se ocultan los controles táctiles, y vuelven a aparecer al tocar la pantalla.

@@ -1035,7 +1035,7 @@ class World private constructor(val seed: Long, val kind: Kind) {
         )
     }
 
-    /** F3: carta + Luz llena · F4: ir al jefe · F5: exvoto (en el Santuario: +50 Perlas y todas las armas) · F6: 150 de daño. */
+    /** F3: carta + Luz llena · F4: ir al jefe · F5: exvoto (en el Santuario: +50 Perlas y todas las armas) · F6: 150 de daño · F8: Isla recibe 40. */
     private fun debugCommand(cmd: Int) {
         when (cmd) {
             3 -> { if (!inSanctuary) { revealMap(); player.luz = player.luzMax } }
@@ -1054,6 +1054,7 @@ class World private constructor(val seed: Long, val kind: Kind) {
                 Exvotos.roll(rng, owned.map { it.id }.toSet())?.let { owned += it; recomputeStats(); showBanner(it.name.uppercase(), 1.5f) }
             }
             6 -> for (e in enemies) e.takeHit(this, 150f, e.x, e.y, HitKind.BLAST)
+            8 -> if (!inSanctuary) hurtPlayer(40f, player.cx + 10f, player.cy, enemies.firstOrNull(), "Depuración (F8)")
         }
     }
 
