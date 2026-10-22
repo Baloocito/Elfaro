@@ -1043,6 +1043,7 @@ class World private constructor(val seed: Long, val kind: Kind) {
         fx.ring(p.cx, p.cy, r * 0.55f, Pal.CREAM)
         fx.burst(p.cx, p.cy, 14, Pal.LAMP_HI, 160f, 0.35f)
         addShake(2f)
+        fx.floater("FOGONAZO", p.cx, p.cy + 18f, Pal.LAMP_HI)
         var hits = 0
         for (e in enemies) {
             if (!e.targetable) continue
