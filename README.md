@@ -15,7 +15,36 @@ Cada push a `main` compila el juego en GitHub Actions y actualiza la release **d
 El APK siempre se firma con la misma keystore de desarrollo (`android/debug.keystore`),
 así que cada versión nueva se instala encima de la anterior sin perder nada.
 
-## Estado: F2 · Catedral Sumergida
+## Estado: F3 · Los 4 biomas
+
+La run completa baja por los 4 biomas (12 pisos) y termina en la Lámpara Madre con el final A o B.
+
+- **Archivo de los Náufragos** (pisos 7-9):
+  - Estanterías que se deslizan sobre rieles cada 6 s, con aviso de tinta 1 s antes. Aplastan: 8 de daño a Isla, 20 a los enemigos.
+  - Atriles con lámpara verde: luz fija de 48 px.
+  - **La Tinta y los élites Tachados solo existen dentro de tu luz**. La Campana los revela 3 s.
+  - Enemigos: Tinta, Bibliotecario sin rostro (se teletransporta y deja páginas trampa), Polillas de papel (de a 4; van a la luz y el Haz las quema) y Copista (escribe líneas que estallan).
+  - **Sala de lectura**: botella garantizada y reto (despejarla sin Haz da un exvoto raro).
+  - **El Cartógrafo** (2.100, 3 fases):
+    - Fase 1: redibuja los muros y dispara un compás en cruz.
+    - Fase 2: un clon de papel repite tus últimos 3 s; si lo rompes, el Cartógrafo queda aturdido y recibe +50 % de daño.
+    - Fase 3: apaga todas las luces menos la tuya y deja un rastro de tinta.
+- **Raíz del Faro** (pisos 10-12):
+  - Vidrio fundido: quema 4 de Luz por segundo. El latido acelera a los enemigos cada 10 s.
+  - **Con más de 120 px de radio te detectan todos**: hay que velar.
+  - Enemigos: Anguila de raíz (sale bajo tus pies), Hijo del faro (usa tu arma), Vidriero (deja vidrio fundido y estalla al morir) y Ojo de la fosa (rayo si tu luz es grande).
+  - **Corazón de piedra**: si lo golpeas suelta 30 de Luz, pero despierta una oleada élite.
+  - **La Lámpara Madre** (3.200, 4 fases):
+    - Fase 1: haces giratorios y raíces bajo tus pies.
+    - Fase 2: se abre y escupe Vidrieros.
+    - Fase 3: ecos de la Sirena, del Obispo y del Cartógrafo.
+    - Fase 4: bebe tu luz, y cada golpe que le das te la devuelve.
+- Afijos nuevos: **Tachado** (Archivo) y **Hambre de luz** (Raíz).
+- **40 botellas con mensaje** (Sala de lectura y salas secretas). Leerlas todas da el **final B**.
+- Recuerdos de Elías (el Cartógrafo) y la nota del Farero tras la Lámpara.
+- El menú de pruebas tiene los 4 biomas y sus jefes. F11 salta al bioma siguiente.
+
+## F2 · Catedral Sumergida
 
 **Menú principal**: al abrir el juego. Continuar descenso (si hay una run guardada), Jugar (ir al
 Santuario), **Niveles de prueba** (Muelle piso 1, la Sirena, Catedral piso 4, el Obispo y la celda
