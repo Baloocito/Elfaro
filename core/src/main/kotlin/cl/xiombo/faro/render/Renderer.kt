@@ -358,6 +358,10 @@ class Renderer : Disposable {
                     }
                 )
                 shapes.rect(x, y - PauseMenu.CELL_H / 2f, PauseMenu.SLOT_W, PauseMenu.CELL_H)
+                if (code != null) {
+                    col(actionColor(a))
+                    shapes.rect(x, y - PauseMenu.CELL_H / 2f, 3f, PauseMenu.CELL_H)
+                }
             }
             if (active) {
                 col(actionColor(a), 0.35f)
@@ -405,7 +409,9 @@ class Renderer : Disposable {
             val ly = if (e.round) e.y + 4f else e.y + e.h + 9f
             val labelY = if (e.label == "LT" || e.label == "RT") e.y + e.h + 10f else if (e.label == "LB" || e.label == "RB") e.y - 2f else ly
             if (e.label == "LB" || e.label == "RB") continue  // LB/RB se leen junto a LT/RT
-            text(e.label, lx, labelY, Pal.OUTLINE, align = 0)
+            val idx = if (ctrl != null) e.code(ctrl.mapping) else -1
+            val onColor = e.round && idx >= 0 && l.actionOf("b$idx") != null
+            text(e.label, lx, labelY, if (onColor) Pal.OUTLINE else Pal.CREAM, align = 0)
         }
         text("LB", 120f - 64f, 132f + 30f, Pal.CREAM, align = 0)
         text("RB", 120f + 64f, 132f + 30f, Pal.CREAM, align = 0)
