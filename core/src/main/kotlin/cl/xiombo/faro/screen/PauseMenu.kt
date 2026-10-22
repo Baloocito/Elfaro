@@ -8,7 +8,10 @@ import cl.xiombo.faro.input.Layout
 import com.badlogic.gdx.Gdx
 
 /**
- * Pausa: Start/Select en el mando, Esc o P en teclado, atrás o el botón II en Android.
+ * Menú del juego con tres páginas:
+ * - Principal (al abrir el juego): Continuar descenso, Jugar, Niveles de prueba, Configurar mando.
+ * - Niveles de prueba: entra directo a cada bioma, a cada jefe o a la celda de Amparo.
+ * - Pausa: Start/Select en el mando, Esc o P en teclado, atrás o el botón II en Android.
  *
  * "Configurar mando" abre una pantalla con el mando dibujado y una tabla de 4 acciones × 2 huecos.
  * Reglas (las hace cumplir [Layout]): máximo 2 botones por acción, un botón solo puede tener
@@ -17,15 +20,28 @@ import com.badlogic.gdx.Gdx
  */
 class PauseMenu {
     enum class Mode { MAIN, CONFIG }
+    enum class Page { TITLE, TESTS, PAUSE }
+
+    /** Lo que RunScreen debe hacer tras elegir una opción. */
+    sealed class Request {
+        object Continue : Request()
+        object Play : Request()
+        object ToTitle : Request()
+        class Test(val floor: Int, val toBoss: Boolean = false, val toCell: Boolean = false) : Request()
+    }
+
+    private class Item(val label: String, val action: () -> Unit)
 
     companion object {
-        val ITEMS = listOf("Continuar", "Configurar mando", "Abandonar run")
+        const val CONFIG_LABEL = "Configurar mando"
 
         // Disposición en coordenadas internas (480 × 270), compartida con Renderer y Controls.
-        const val ITEM_Y0 = 160f
-        const val ITEM_STEP = 24f
-        const val ITEM_W = 200f
-        const val ITEM_H = 18f
+        const val ITEM_STEP = 22f
+        const val ITEM_W = 220f
+        const val ITEM_H = 17f
+
+        /** Y de la opción i cuando hay n (centradas un poco por encima de la mitad). */
+        fun itemY(i: Int, n: Int) = 135f + n * 11f - i * ITEM_STEP
 
         // Pantalla de configuración
         const val ROW_Y0 = 184f
@@ -41,11 +57,11 @@ class PauseMenu {
         const val BTN_W = 100f
         const val CAPTURE_TIME = 6f
 
-        fun itemAt(ix: Float, iy: Float): Int {
+        fun itemAt(ix: Float, iy: Float, n: Int): Int {
             val x0 = (480f - ITEM_W) / 2f
             if (ix < x0 || ix > x0 + ITEM_W) return -1
-            for (i in ITEMS.indices) {
-                val y = ITEM_Y0 - i * ITEM_STEP
+            for (i in 0 until n) {
+                val y = itemY(i, n)
                 if (iy >= y - ITEM_H / 2f && iy <= y + ITEM_H / 2f) return i
             }
             return -1
@@ -75,6 +91,19 @@ class PauseMenu {
         private set
     var mode = Mode.MAIN
         private set
+    var page = Page.PAUSE
+        private set
+    /** Hay una run guardada (para mostrar "Continuar descenso"). */
+    var hasSave = false
+    var request: Request? = null
+    private var items: List<Item> = emptyList()
+    val labels: List<String> get() = items.map { it.label }
+    val title: String
+        get() = when (page) {
+            Page.TITLE -> "FARO HUNDIDO"
+            Page.TESTS -> "NIVELES DE PRUEBA"
+            Page.PAUSE -> "PAUSA"
+        }
     var sel = 0
         private set
     /** Pedido de abandonar la run (cuenta como muerte y vuelve al Santuario). */
@@ -104,9 +133,65 @@ class PauseMenu {
         if (open) return
         open = true
         mode = Mode.MAIN
-        sel = 0
         capturing = false
         note = ""
+        setPage(Page.PAUSE)
+    }
+
+    /** Menú principal (al abrir el juego o desde la pausa). */
+    fun openTitle(save: Boolean) {
+        hasSave = save
+        open = true
+        mode = Mode.MAIN
+        capturing = false
+        note = ""
+        setPage(Page.TITLE)
+    }
+
+    private fun setPage(p: Page) {
+        page = p
+        sel = 0
+        items = when (p) {
+            Page.TITLE -> buildList {
+                if (hasSave) add(Item("Continuar descenso") { finish(Request.Continue) })
+                add(Item("Jugar  ·  ir al Santuario") { finish(Request.Play) })
+                add(Item("Niveles de prueba") { setPage(Page.TESTS) })
+                add(Item(CONFIG_LABEL) { openConfig() })
+            }
+            Page.TESTS -> listOf(
+                Item("Muelle Ahogado  ·  piso 1") { finish(Request.Test(1)) },
+                Item("Jefe: La Sirena de Brea") { finish(Request.Test(3, toBoss = true)) },
+                Item("Catedral Sumergida  ·  piso 4") { finish(Request.Test(4)) },
+                Item("Jefe: El Obispo Coral") { finish(Request.Test(6, toBoss = true)) },
+                Item("La celda de Amparo") { finish(Request.Test(1, toCell = true)) },
+                Item("Volver") { setPage(Page.TITLE) },
+            )
+            Page.PAUSE -> listOf(
+                Item("Continuar") { open = false },
+                Item(CONFIG_LABEL) { openConfig() },
+                Item("Abandonar run") { if (inRun) { abandonRequested = true; open = false } else say("Ya estás en el Santuario") },
+                Item("Menú principal") { finish(Request.ToTitle) },
+            )
+        }
+    }
+
+    private fun finish(r: Request) {
+        request = r
+        open = false
+    }
+
+    private var pendingPad: Gamepad? = null
+
+    private fun openConfig() {
+        val ctrl = pendingPad?.controller
+        if (ctrl == null) say("Conecta un mando Bluetooth y vuelve a intentarlo", true)
+        else {
+            mode = Mode.CONFIG
+            layout = Bindings.layout(ctrl).copy()
+            row = 0; col = 0
+            capturing = false
+            say("Elige un hueco y pulsa A para asignarle un botón")
+        }
     }
 
     private fun say(text: String, error: Boolean = false) {
@@ -125,34 +210,26 @@ class PauseMenu {
     }
 
     private fun updateMain(pad: Gamepad, c: Controls) {
+        pendingPad = pad
         val mi = c.menuInput
-        if (mi.up || pad.navUp) sel = (sel + ITEMS.size - 1) % ITEMS.size
-        if (mi.down || pad.navDown) sel = (sel + 1) % ITEMS.size
+        val n = items.size
+        if (mi.up || pad.navUp) sel = (sel + n - 1) % n
+        if (mi.down || pad.navDown) sel = (sel + 1) % n
         var choose = -1
         if (mi.confirm || pad.confirm) choose = sel
         if (mi.hasTap) {
-            val t = itemAt(mi.tapX, mi.tapY)
+            val t = itemAt(mi.tapX, mi.tapY, n)
             if (t >= 0) { sel = t; choose = t }
         }
         if (choose < 0 && (mi.back || mi.pause || pad.back || pad.startPressed)) {
-            open = false
+            when (page) {
+                Page.PAUSE -> open = false
+                Page.TESTS -> setPage(Page.TITLE)
+                Page.TITLE -> {}   // el menú principal no se cierra sin elegir
+            }
             return
         }
-        when (choose) {
-            0 -> open = false
-            1 -> {
-                val ctrl = pad.controller
-                if (ctrl == null) say("Conecta un mando Bluetooth y vuelve a intentarlo", true)
-                else {
-                    mode = Mode.CONFIG
-                    layout = Bindings.layout(ctrl).copy()
-                    row = 0; col = 0
-                    capturing = false
-                    say("Elige un hueco y pulsa A para asignarle un botón")
-                }
-            }
-            2 -> if (inRun) { abandonRequested = true; open = false } else say("Ya estás en el Santuario")
-        }
+        if (choose in items.indices) items[choose].action()
     }
 
     private fun updateConfig(pad: Gamepad, c: Controls, dt: Float) {
@@ -225,7 +302,7 @@ class PauseMenu {
             say("Controles guardados")
         }
         mode = Mode.MAIN
-        sel = 1
+        sel = labels.indexOf(CONFIG_LABEL).coerceAtLeast(0)
         capturing = false
     }
 }

@@ -21,14 +21,29 @@ class RunScreen : KtxScreen {
     private val controls = Controls(renderer)
     private val pad = Gamepad()
     private val menu = PauseMenu()
-    /** Si hay una run guardada, se continúa; si no, se empieza en el Santuario. */
-    private var world = RunSave.load()?.let { World.resume(it) } ?: World.sanctuary()
+    /** El juego abre en el menú principal, con el Santuario de fondo. */
+    private var world = World.sanctuary()
     private var lastHurt = 0
 
     override fun show() {
         Bindings.load()
         Gdx.input.inputProcessor = controls
         Gdx.input.setCatchKey(Input.Keys.BACK, true)   // atrás pausa en vez de cerrar
+        menu.openTitle(RunSave.exists())
+    }
+
+    /** Opciones del menú principal, de los niveles de prueba y de la pausa. */
+    private fun handleRequest(r: PauseMenu.Request) {
+        when (r) {
+            PauseMenu.Request.Continue -> newWorld(RunSave.load()?.let { World.resume(it) } ?: World.sanctuary())
+            PauseMenu.Request.Play -> if (!world.inSanctuary) newWorld(World.sanctuary())
+            PauseMenu.Request.ToTitle -> {
+                world.saveRun()   // una run real queda guardada para "Continuar descenso"
+                newWorld(World.sanctuary())
+                menu.openTitle(RunSave.exists())
+            }
+            is PauseMenu.Request.Test -> newWorld(World.testRun(r.floor, r.toBoss, r.toCell))
+        }
     }
 
     override fun render(delta: Float) {
@@ -46,6 +61,7 @@ class RunScreen : KtxScreen {
                 menu.abandonRequested = false
                 world.abandon()
             }
+            menu.request?.let { menu.request = null; handleRequest(it) }
             acc = 0f
         } else {
             controls.applyPadButtons(pad)

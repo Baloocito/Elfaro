@@ -19,6 +19,8 @@ enum class CellType(val label: String) {
     SECRET("Secreta"),
     ANTESALA("Antesala"),
     CAPILLA("Capilla"),
+    /** Celda con un rescatable (Amparo en el Muelle). Sala custodiada: hay que despejarla para abrir. */
+    CELDA("Celda"),
     SANCTUARY("Santuario"),
 }
 
@@ -41,7 +43,7 @@ class Cell(val gx: Int, val gy: Int, var type: CellType) {
     /** La Cartógrafa (meta) deja ver el tipo de las salas especiales desde el inicio del piso. */
     var iconShown = false
 
-    val isCombat get() = type == CellType.COMBAT || type == CellType.ELITE || type == CellType.STAIRS || type == CellType.BOSS
+    val isCombat get() = type == CellType.COMBAT || type == CellType.ELITE || type == CellType.STAIRS || type == CellType.BOSS || type == CellType.CELDA
 }
 
 class FloorMap(val cells: Array<Array<Cell?>>, val start: Cell) {
@@ -100,6 +102,19 @@ class FloorMap(val cells: Array<Array<Cell?>>, val start: Cell) {
  * de probabilidad por vecino, descartando los que ya tocan más de una sala (ramas, no bloques).
  */
 object FloorGen {
+    /**
+     * Pone la celda del rescate en un piso ya generado, sin usar el generador aleatorio (así el resto
+     * del piso no cambia al reanudar): el callejón sin salida de combate más lejano; si no hay, la
+     * sala de combate normal más lejana.
+     */
+    fun placeRescue(map: FloorMap): Cell? {
+        fun neighbors(c: Cell) = Dir.entries.count { map.neighbor(c, it) != null }
+        val cands = map.all.filter { it.type == CellType.COMBAT && it.partner == null && it.dist >= 2 }
+        val pick = cands.filter { neighbors(it) == 1 }.maxByOrNull { it.dist } ?: cands.maxByOrNull { it.dist } ?: return null
+        pick.type = CellType.CELDA
+        return pick
+    }
+
     fun roomCount(floor: Int) = min(20, 7 + (1.5f * floor).roundToInt())
 
     /** El Santuario: un piso de una sola sala. */

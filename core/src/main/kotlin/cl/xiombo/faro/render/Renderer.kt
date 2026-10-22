@@ -230,11 +230,21 @@ class Renderer : Disposable {
         Gdx.gl.glEnable(GL20.GL_BLEND)
         shapes.projectionMatrix = internalProj
         shapes.begin(ShapeType.Filled)
-        col(Pal.OUTLINE, 0.82f)
+        val titlePage = m.page != PauseMenu.Page.PAUSE
+        col(Pal.OUTLINE, if (titlePage) 0.62f else 0.82f)
         shapes.rect(0f, 0f, iw.toFloat(), ih.toFloat())
+        val labels = m.labels
+        val n = labels.size
         val x0 = (iw - PauseMenu.ITEM_W) / 2f
-        PauseMenu.ITEMS.forEachIndexed { i, _ ->
-            val y = PauseMenu.ITEM_Y0 - i * PauseMenu.ITEM_STEP
+        if (titlePage) {
+            // Haz del faro detrás del título.
+            col(Pal.LAMP, 0.10f)
+            shapes.triangle(iw / 2f, 236f, iw / 2f - 160f, 270f, iw / 2f + 160f, 270f)
+            col(Pal.LAMP_DIM)
+            shapes.rect(iw / 2f - 70f, 226f, 140f, 1f)
+        }
+        for (i in 0 until n) {
+            val y = PauseMenu.itemY(i, n)
             col(if (i == m.sel) Pal.LAMP else Pal.NIGHT, if (i == m.sel) 0.9f else 0.8f)
             shapes.rect(x0, y - PauseMenu.ITEM_H / 2f, PauseMenu.ITEM_W, PauseMenu.ITEM_H)
         }
@@ -243,13 +253,15 @@ class Renderer : Disposable {
         Gdx.gl.glViewport(0, 0, bw, bh)
         batch.projectionMatrix = screenProj
         batch.begin()
-        text("PAUSA", iw / 2f, 210f, Pal.LAMP, align = 0)
-        PauseMenu.ITEMS.forEachIndexed { i, label ->
-            val y = PauseMenu.ITEM_Y0 - i * PauseMenu.ITEM_STEP + 5f
+        text(m.title, iw / 2f, if (titlePage) 240f else 214f, Pal.LAMP, align = 0)
+        if (m.page == PauseMenu.Page.TITLE) text("Perlas ${Meta.perlas}" + if (Meta.shopOpen) "" else "  ·  la tienda del Santuario sigue cerrada", iw / 2f, 220f, Pal.SHELL, align = 0)
+        if (m.page == PauseMenu.Page.TESTS) text("Runs de prueba: no guardan ni dan Perlas", iw / 2f, 220f, Pal.SHELL, align = 0)
+        labels.forEachIndexed { i, label ->
+            val y = PauseMenu.itemY(i, n) + 5f
             text(label, iw / 2f, y, if (i == m.sel) Pal.OUTLINE else Pal.CREAM, align = 0)
         }
         val ctl = pad.controller
-        text(if (ctl == null) "Sin mando conectado" else "Mando: ${ctl.name.take(40)}", iw / 2f, 70f, Pal.SHELL, align = 0)
+        text(if (ctl == null) "Sin mando conectado" else "Mando: ${ctl.name.take(40)}", iw / 2f, 64f, Pal.SHELL, align = 0)
         if (m.note.isNotEmpty() && m.noteT > 0f) text(m.note, iw / 2f, 46f, if (m.noteError) Pal.CORAL else Pal.FOAM, align = 0)
         val hint = when {
             c.padActive || ctl != null -> "Stick o cruceta para elegir  ·  A aceptar  ·  B volver"
@@ -477,7 +489,7 @@ class Renderer : Disposable {
             col(if (flick == 0) Pal.LAMP else Pal.LAMP_DIM, min(1f, f.t))
             shapes.rect(f.x - 2f, f.y - 1f + flick, 4f, 4f)
         }
-        for (p in w.cell.pedestals) if (!p.taken || p.kind == PedKind.REFUGIO || p.kind == PedKind.VIGILIA || p.kind == PedKind.META) drawPedestal(w, p)
+        for (p in w.cell.pedestals) if (!p.taken || p.kind == PedKind.REFUGIO || p.kind == PedKind.VIGILIA || p.kind == PedKind.META || p.kind == PedKind.JAULA) drawPedestal(w, p)
         for (s in w.pending) {
             val pulse = ((w.time * 10f).toInt() % 2 == 0)
             col(if (pulse) (s.affix?.color ?: Pal.CORAL) else Pal.WATER, 0.8f)
@@ -834,6 +846,27 @@ class Renderer : Disposable {
                 col(p.exvoto!!.tag.color)
                 shapes.rect(x - 2f, y + 5f + bob, 4f, 4f)
             }
+            PedKind.JAULA -> {
+                // Barrotes de hierro; Amparo dentro hasta que la liberas.
+                if (!p.taken) drawAmparo(x, y - 2f, w.time)
+                val open = p.taken
+                col(Pal.OUTLINE)
+                shapes.rect(x - 14f, y + 22f, 28f, 3f)
+                shapes.rect(x - 14f, y - 8f, 28f, 2f)
+                for (i in 0 until 7) {
+                    val bx = x - 13f + i * 4.2f
+                    if (open && i in 2..4) continue   // la puerta queda abierta
+                    col(Pal.OUTLINE)
+                    shapes.rect(bx - 0.5f, y - 8f, 2f, 31f)
+                    col(Pal.STONE)
+                    shapes.rect(bx, y - 7f, 1f, 29f)
+                }
+                if (!open) {
+                    // Candado: brilla cuando ya no quedan guardias.
+                    outlined(x - 2f, y + 4f, 4f, 4f, if (p.selected && bob > 0f) Pal.LAMP_HI else Pal.LAMP_DIM)
+                }
+            }
+            PedKind.AMPARO -> drawAmparo(x, y - 2f, w.time)
             PedKind.OFRENDA_MAX, PedKind.OFRENDA_MITAD -> {
                 // Altar de piedra con el exvoto encima; la mancha de color dice qué pide.
                 outlined(x - 8f, y - 6f, 16f, 9f, Pal.STONE)
@@ -863,6 +896,25 @@ class Renderer : Disposable {
                 shapes.rect(x - 2f, y + 5f + bob, 4f, 4f)
             }
         }
+    }
+
+    /** Amparo, la guardesa: abrigo gris azulado, pelo blanco y un manojo de llaves. */
+    private fun drawAmparo(x: Float, y: Float, t: Float) {
+        col(Pal.SHADOW)
+        shapes.ellipse(x - 5f, y - 3f, 10f, 4f)
+        outlined(x - 5f, y - 1f, 10f, 12f, Pal.GLASS_TEAL)
+        outlined(x - 4f, y + 11f, 8f, 7f, Pal.SKIN)
+        col(Pal.CREAM)
+        shapes.rect(x - 4f, y + 15f, 8f, 3f)
+        shapes.rect(x - 5f, y + 13f, 1f, 4f)
+        col(Pal.OUTLINE)
+        shapes.rect(x - 2f, y + 13f, 1f, 1f); shapes.rect(x + 1f, y + 13f, 1f, 1f)
+        // Llaves que se mecen.
+        val k = if ((t * 2f).toInt() % 2 == 0) 0f else 1f
+        col(Pal.LAMP_DIM)
+        shapes.rect(x + 5f, y + 3f - k, 2f, 3f)
+        col(Pal.LAMP)
+        shapes.rect(x + 5f, y + 2f - k, 1f, 1f)
     }
 
     private fun weaponColor(wp: Weapon): Color = when (wp) {
@@ -1288,6 +1340,8 @@ class Renderer : Disposable {
                 PedKind.VIGILIA -> light(ped.x, ped.y + 22f, if (ped.taken) 46f else 84f, 1f)
                 PedKind.DESCENSO -> light(ped.x, ped.y, 46f, 0.8f)
                 PedKind.OFRENDA_MAX, PedKind.OFRENDA_MITAD -> if (!ped.taken) light(ped.x, ped.y + 8f, 34f, 0.8f)
+                PedKind.JAULA -> light(ped.x, ped.y + 8f, if (ped.taken) 24f else 40f, 0.75f)
+                PedKind.AMPARO -> light(ped.x, ped.y + 8f, 40f, 0.8f)
                 else -> if (!ped.taken) light(ped.x, ped.y + 6f, 26f, 0.7f)
             }
         }
@@ -1483,6 +1537,7 @@ class Renderer : Disposable {
                     CellType.SECRET -> Pal.MEDUSA
                     CellType.ANTESALA -> Pal.LAMP_DIM
                     CellType.CAPILLA -> if (c.pedestals.any { !it.taken } || !c.stocked) Pal.LILAC else null
+                    CellType.CELDA -> if (c.pedestals.any { !it.taken } || !c.stocked) Pal.SKIN else null
                     else -> null
                 }
                 if (icon != null) {
@@ -1528,6 +1583,7 @@ class Renderer : Disposable {
         } else {
             text("LUZ ${p.luz.roundToInt()}/${p.luzMax.roundToInt()}", 8f + p.luzMax + 6f, ih - 7f, Pal.LAMP_HI)
             text("PISO ${w.floorNum}   BAJAS ${w.kills}   ${p.weapon.label.uppercase()}", iw - 8f, ih - 7f, Pal.CREAM, align = 1)
+            if (w.test) text("MODO PRUEBA", iw - 8f, 196f, Pal.CORAL, align = 1)
         }
         for (f in w.fx.floaters) {
             text(f.text, f.x - camLeft, f.y - camBottom, f.color, alpha = (f.t / 0.9f).coerceIn(0f, 1f), align = 0)

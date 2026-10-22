@@ -47,6 +47,9 @@ object Meta {
     const val ANCLA = "ancla"
     const val CARTOGRAFA = "cartografa"
     const val CAMPANERO = "campanero"
+    /** Amparo, la guardesa: rescatarla en el Muelle abre la tienda del Santuario. */
+    const val GUARDESA = "guardesa"
+    val shopOpen get() = GUARDESA in unlocks
 
     fun load() {
         runCatching {

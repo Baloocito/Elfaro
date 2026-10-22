@@ -31,7 +31,7 @@ import kotlin.random.Random
  * Un mundo: el Santuario entre runs, o una run: Muelle Ahogado (pisos 1-3, la Sirena de Brea) y
  * Catedral Sumergida (pisos 4-6, el Obispo Coral). Lógica determinista a 60 Hz (§11).
  */
-class World private constructor(val seed: Long, val kind: Kind) {
+class World private constructor(val seed: Long, val kind: Kind, val test: Boolean = false) {
     enum class Kind { SANCTUARY, RUN }
     enum class Mode { PLAYING, DEAD, VICTORY }
     /** Lo que RunScreen debe crear a continuación. */
@@ -58,6 +58,7 @@ class World private constructor(val seed: Long, val kind: Kind) {
         const val SUMMON_TELEGRAPH = 0.8f   // círculos de sal antes de cada invocación
         const val CHAPTER_TIME = 4.5f
         const val MEMORY_TIME = 12f
+        const val CLOSED_SHOP = "rescata a Amparo, la guardesa, en el Muelle Ahogado"
         const val FLOOR_PERLAS = 1
         const val SLOWMO_TIME = 1.2f
         const val FLASH_TIME = 0.25f
@@ -65,6 +66,13 @@ class World private constructor(val seed: Long, val kind: Kind) {
         fun sanctuary(): World = World(System.nanoTime(), Kind.SANCTUARY).apply { initSanctuary() }
         fun newRun(): World = World(System.nanoTime(), Kind.RUN).apply { initRun() }
         fun resume(d: RunSave.Data): World? = runCatching { World(d.seed, Kind.RUN).apply { initFromSave(d) } }.getOrNull()
+
+        /**
+         * Run de prueba (menú principal → Niveles de prueba): empieza en [floor], opcionalmente directo
+         * al jefe o a la celda del rescate. No guarda la run (no pisa una run real) ni da Perlas.
+         */
+        fun testRun(floor: Int, toBoss: Boolean = false, toCell: Boolean = false): World =
+            World(System.nanoTime(), Kind.RUN, test = true).apply { initTest(floor, toBoss, toCell) }
     }
 
     private var rng = Random(seed)
@@ -199,6 +207,22 @@ class World private constructor(val seed: Long, val kind: Kind) {
         showBanner("EL SANTUARIO", 2.2f)
     }
 
+    private fun initTest(floor: Int, toBoss: Boolean, toCell: Boolean) {
+        forceRescueFloor = if (toCell) floor else -1
+        initRun()
+        if (floor != 1) startFloor(floor)
+        when {
+            toBoss -> map.all.firstOrNull { it.type == CellType.BOSS }?.let { enterCell(it, null) }
+            toCell -> map.all.firstOrNull { it.type == CellType.CELDA }?.let { enterCell(it, null) }
+        }
+    }
+
+    /** Piso del Muelle donde está la celda de Amparo en esta run (sale de la semilla: no hace falta guardarlo). */
+    private val rescueFloor = 1 + ((seed ushr 11) and 0x7fffffffL).toInt() % 3
+    private var forceRescueFloor = -1
+    private fun hasRescue(floor: Int) =
+        floor == forceRescueFloor || (!test && floor == rescueFloor && !Meta.shopOpen)
+
     /** Run nueva con lo elegido en el Santuario. */
     private fun initRun() {
         player.weapon = Meta.weapon
@@ -224,6 +248,7 @@ class World private constructor(val seed: Long, val kind: Kind) {
         floorSeed = d.floorSeed
         rng = Random(d.seed xor d.floorSeed xor (d.cellX * 31L + d.cellY))
         map = FloorGen.generate(floorSeed, floorNum, hasBoss = Biome.isBossFloor(floorNum))
+        if (hasRescue(floorNum)) FloorGen.placeRescue(map)
         for (c in map.all) c.templateIndex = Random(c.seed).nextInt(templatesFor(c).size)
         for (cs in d.cells) {
             val c = map[cs.gx, cs.gy] ?: continue
@@ -265,6 +290,7 @@ class World private constructor(val seed: Long, val kind: Kind) {
                 CellType.ANTESALA -> "antesala"
                 CellType.SANCTUARY -> "santuario"
                 CellType.CAPILLA -> "capilla"
+                CellType.CELDA -> "celda"
                 else -> "combate"
             }
         // Cada bioma usa sus plantillas propias si las tiene ("cat_combate"); si no, las comunes.
@@ -276,6 +302,7 @@ class World private constructor(val seed: Long, val kind: Kind) {
         floorNum = n
         floorSeed = rng.nextLong()
         map = FloorGen.generate(floorSeed, n, hasBoss = Biome.isBossFloor(n))
+        if (hasRescue(n)) FloorGen.placeRescue(map)
         mapRevealed = false
         offered.clear()
         for (c in map.all) c.templateIndex = Random(c.seed).nextInt(templatesFor(c).size)
@@ -358,9 +385,11 @@ class World private constructor(val seed: Long, val kind: Kind) {
                 CellType.ELITE -> showBanner("ALGO MÁS GRANDE ACECHA")
                 CellType.ANTESALA -> showBanner(if (biome == Biome.CATEDRAL) "ANTESALA  ·  UN CORO REZA AL OTRO LADO" else "ANTESALA  ·  ALGO CANTA AL OTRO LADO")
                 CellType.CAPILLA -> showBanner("CAPILLA DE LA OFRENDA  ·  ${Story.CAPILLA.uppercase()}", 3f)
+                CellType.CELDA -> showBanner("UNA CELDA CUSTODIADA  ·  ALGUIEN PIDE AYUDA", 3f)
                 else -> {}
             }
         }
+        if (anchor.type == CellType.CELDA && anchor.cleared) anchor.pedestals.forEach { if (it.kind == PedKind.JAULA) it.selected = true }
         if (kind == Kind.RUN && mode == Mode.PLAYING) saveRun()
     }
 
@@ -384,6 +413,7 @@ class World private constructor(val seed: Long, val kind: Kind) {
             CellType.SECRET -> pos.firstOrNull()?.let { c.pedestals += exvotoPed(it, false, Rarity.RARO) }
             CellType.REFUGE -> pos.firstOrNull()?.let { c.pedestals += Pedestal(it[0], it[1], PedKind.REFUGIO) }
             CellType.ANTESALA -> pos.firstOrNull()?.let { c.pedestals += Pedestal(it[0], it[1], PedKind.VIGILIA) }
+            CellType.CELDA -> pos.firstOrNull()?.let { c.pedestals += Pedestal(it[0], it[1], PedKind.JAULA) }
             CellType.CAPILLA -> if (pos.size >= 2) {
                 // El mismo exvoto (raro o mejor) por dos precios: 10 de Luz máxima o la mitad de tu Luz.
                 val exclude = owned.map { it.id }.toSet() + offered
@@ -408,14 +438,20 @@ class World private constructor(val seed: Long, val kind: Kind) {
         val pos = room.template.pedestals.map { room.tileCenter(it[0], it[1]) }
         if (pos.size < 12) return
         c.pedestals += Pedestal(pos[0][0], pos[0][1], PedKind.DESCENSO)
+        val shop = Meta.shopOpen
         Weapon.entries.forEachIndexed { i, w ->
             val p = pos[1 + i]
             val unlocked = Meta.isUnlocked(w)
             val price = if (w == Weapon.ANCLA && !unlocked) 60 else 0
             c.pedestals += Pedestal(p[0], p[1], PedKind.ARMA, price = price, weapon = w).also {
                 it.selected = Meta.weapon == w
-                if (!unlocked) it.lockedText = Meta.unlockRequirement(w)
+                if (!unlocked) it.lockedText = if (price > 0 && !shop) CLOSED_SHOP else Meta.unlockRequirement(w)
             }
+        }
+        // Amparo: rescatada, vive aquí y atiende la tienda.
+        if (shop) {
+            val a = room.nearestFloor(pos[7][0] + 96f, pos[7][1])
+            c.pedestals += Pedestal(a[0], a[1], PedKind.AMPARO)
         }
         if (Meta.PESCADORA in Meta.unlocks) {
             val commons = Exvotos.all.filter { it.rarity == Rarity.COMUN }
@@ -444,9 +480,12 @@ class World private constructor(val seed: Long, val kind: Kind) {
             c.pedestals += Pedestal(p[0], p[1], PedKind.META, price = if (have) 0 else price, metaId = m.first, metaTitle = m.second, metaDetail = m.third).also {
                 it.taken = have
                 if (m.first == Meta.CAMPANERO) it.lockedText = "rescátalo en la Catedral Sumergida"
+                else if (!have && !shop) it.lockedText = CLOSED_SHOP
             }
         }
     }
+
+    private var amparoLine = 0
 
     private fun exvotoPed(p: FloatArray, priced: Boolean, min: Rarity = Rarity.COMUN): Pedestal {
         val exclude = owned.map { it.id }.toSet() + offered
@@ -467,7 +506,8 @@ class World private constructor(val seed: Long, val kind: Kind) {
         for (i in 0 until n) {
             var wb = if (i == n - 1) budget - (budget / n) * (n - 1) else budget / n
             val wave = ArrayList<Pair<String, Affix?>>()
-            if (i == 0 && c.type == CellType.ELITE) {
+            // La celda tiene guardia: un élite como en las salas de élite.
+            if (i == 0 && (c.type == CellType.ELITE || c.type == CellType.CELDA)) {
                 val e = pool[rng.nextInt(pool.size)]
                 wave += e.id to affixes[rng.nextInt(affixes.size)]
                 wb -= e.cost * 2
@@ -629,6 +669,9 @@ class World private constructor(val seed: Long, val kind: Kind) {
             val p = room.nearestFloor(room.width / 2f, room.height / 2f)
             cell.pedestals += Pedestal(p[0], p[1], PedKind.ESCALERA)
             showBanner("UNA ESCALERA BAJA AL ABISMO")
+        } else if (cell.type == CellType.CELDA) {
+            cell.pedestals.forEach { if (it.kind == PedKind.JAULA) it.selected = true }
+            showBanner("LOS GUARDIAS HAN CAÍDO  ·  ABRE LA CELDA", 2.6f)
         } else if (cell.type != CellType.BOSS) {
             showBanner("SALA DESPEJADA")
         }
@@ -824,18 +867,19 @@ class World private constructor(val seed: Long, val kind: Kind) {
             }
             PedKind.ESCALERA -> {
                 perlasRun += FLOOR_PERLAS
-                Meta.addPerlas(FLOOR_PERLAS)
+                if (!test) Meta.addPerlas(FLOOR_PERLAS)
                 startFloor(floorNum + 1)
             }
             PedKind.FIN -> {
                 mode = Mode.VICTORY
                 modeT = 0f
-                RunSave.clear()
+                if (!test) RunSave.clear()
             }
             PedKind.ARMA -> {
                 val w = p.weapon ?: return
                 if (!Meta.isUnlocked(w)) {
                     if (w == Weapon.ANCLA && p.price > 0) {
+                        if (!Meta.shopOpen) { fx.floater("TIENDA CERRADA", p.x, p.y + 16f, Pal.CORAL); return }
                         if (!payPerlas(p.price)) return
                         Meta.unlocks += Meta.ANCLA
                         showBanner("ANCLA DESBLOQUEADA", 2f)
@@ -872,6 +916,21 @@ class World private constructor(val seed: Long, val kind: Kind) {
                 showBanner(p.metaTitle.uppercase(), 1.8f)
             }
             PedKind.DESCENSO -> next = Next.NEW_RUN
+            PedKind.JAULA -> {
+                if (!cell.cleared) { fx.floater("AÚN HAY GUARDIAS", p.x, p.y + 20f, Pal.CORAL); return }
+                p.taken = true
+                Meta.unlocks += Meta.GUARDESA
+                Meta.save()
+                fx.burst(p.x, p.y + 8f, 24, Pal.LAMP_HI, 110f, 0.7f)
+                showBanner("AMPARO ES LIBRE  ·  EL SANTUARIO ABRE SU TIENDA", 3.5f)
+                memory = Story.AMPARO
+                memoryT = MEMORY_TIME
+                saveRun()
+            }
+            PedKind.AMPARO -> {
+                showBanner("AMPARO: ${Story.AMPARO_LINES[amparoLine % Story.AMPARO_LINES.size].uppercase()}", 4f)
+                amparoLine++
+            }
             PedKind.OFRENDA_MAX, PedKind.OFRENDA_MITAD -> {
                 val e = p.exvoto ?: return
                 if (p.kind == PedKind.OFRENDA_MAX) {
@@ -1163,7 +1222,7 @@ class World private constructor(val seed: Long, val kind: Kind) {
         Meta.bosses += id
         val perlas = if (id == "obispo") OBISPO_PERLAS else BOSS_PERLAS
         perlasRun += perlas
-        Meta.addPerlas(perlas)
+        if (!test) Meta.addPerlas(perlas)
         if (firstTime) {
             memory = Story.memoryOf(id)
             memoryT = MEMORY_TIME
@@ -1247,7 +1306,7 @@ class World private constructor(val seed: Long, val kind: Kind) {
         )
         fx.burst(player.cx, player.cy, 30, Pal.LAMP_DIM, 120f, 0.9f)
         showBanner("LA LUZ SE APAGÓ", 99f)
-        RunSave.clear()
+        if (!test) RunSave.clear()
     }
 
     /** Radio de luz de Isla (§3): 48 + 1,2·Luz, con los modificadores del bioma y los exvotos. */
@@ -1333,7 +1392,7 @@ class World private constructor(val seed: Long, val kind: Kind) {
 
     /** Guarda la run: se llama al entrar en cada sala, al usar el Farol de vigilia y al pausar la app. */
     fun saveRun() {
-        if (kind != Kind.RUN || mode != Mode.PLAYING) return
+        if (kind != Kind.RUN || mode != Mode.PLAYING || test) return
         val entered = enteredCell ?: cell
         RunSave.save(
             RunSave.Data(
@@ -1371,7 +1430,7 @@ class World private constructor(val seed: Long, val kind: Kind) {
             }
             5 -> if (inSanctuary) {
                 Meta.perlas += 50
-                Meta.bosses += "sirena"; Meta.bosses += "obispo"; Meta.unlocks += Meta.ANCLA
+                Meta.bosses += "sirena"; Meta.bosses += "obispo"; Meta.unlocks += Meta.ANCLA; Meta.unlocks += Meta.GUARDESA
                 Meta.save()
                 stockSanctuary()
                 showBanner("DEBUG: +50 PERLAS Y TODAS LAS ARMAS", 1.8f)

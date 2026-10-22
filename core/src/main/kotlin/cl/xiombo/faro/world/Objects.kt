@@ -12,6 +12,8 @@ enum class PedKind {
     ARMA, INICIAL, META, DESCENSO,
     // Capilla de la ofrenda (Catedral): el mismo exvoto por dos precios distintos.
     OFRENDA_MAX, OFRENDA_MITAD,
+    // Rescate: la jaula de la celda y Amparo en el Santuario.
+    JAULA, AMPARO,
 }
 
 /**
@@ -49,6 +51,8 @@ class Pedestal(
             PedKind.DESCENSO -> "Bajar al faro"
             PedKind.OFRENDA_MAX -> "Ofrecer 10 de Luz máxima por ${exvoto!!.name}"
             PedKind.OFRENDA_MITAD -> "Ofrecer la mitad de tu Luz por ${exvoto!!.name}"
+            PedKind.JAULA -> "Abrir la celda"
+            PedKind.AMPARO -> "Amparo, la guardesa"
         }
 
     val detail: String
@@ -73,6 +77,8 @@ class Pedestal(
                 val e = exvoto!!
                 "${e.rarity.label}. ${e.desc} Rechazar no cuesta nada."
             }
+            PedKind.JAULA -> if (selected) "Los guardias cayeron. Ábrela." else "Alguien sigue vivo ahí dentro. Primero, acaba con los guardias."
+            PedKind.AMPARO -> "Hablar."
         }
 }
 
