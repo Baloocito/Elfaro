@@ -4,6 +4,7 @@ import cl.xiombo.faro.data.Balance
 import cl.xiombo.faro.input.Bindings
 import cl.xiombo.faro.input.Controls
 import cl.xiombo.faro.input.Gamepad
+import cl.xiombo.faro.input.VirtualController
 import cl.xiombo.faro.render.Renderer
 import cl.xiombo.faro.world.World
 import com.badlogic.gdx.Gdx
@@ -29,6 +30,10 @@ class RunScreen : KtxScreen {
     }
 
     override fun render(delta: Float) {
+        if (controls.toggleVirtualPad) {
+            controls.toggleVirtualPad = false
+            pad.virtual = if (pad.virtual == null) VirtualController() else null
+        }
         pad.poll()
         controls.menuOpen = menu.open
 

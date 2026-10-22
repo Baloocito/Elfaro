@@ -12,59 +12,146 @@ enum class Action(val label: String) {
 }
 
 /**
- * Botones del mando. Por defecto sigue la tabla de §3 (disposición Xbox):
- * Farol = RT / RB / X · Destello = A · Haz = LT / LB / B · Usar = Y.
- * Si el usuario reasigna una acción desde la pausa, su elección sustituye a las de por defecto.
+ * Distribución de botones de una run: hasta 2 botones por acción y cada botón en una sola acción.
+ * Códigos: "b12" = botón 12; "a4+" = eje 4 en positivo (gatillos analógicos).
  *
- * Formato: "b12" = botón 12; "a4+" = eje 4 en positivo (gatillos analógicos).
+ * Todas las operaciones mantienen las reglas: al asignar un botón que ya está en uso se
+ * intercambian los huecos, y ninguna acción puede quedarse sin botón.
  */
+class Layout(val slots: Array<Array<String?>>) {
+    class Result(val message: String, val error: Boolean)
+
+    fun copy() = Layout(Array(slots.size) { slots[it].copyOf() })
+
+    fun codes(a: Int): List<String> = slots[a].filterNotNull()
+    fun count(a: Int) = slots[a].count { it != null }
+
+    fun find(code: String): Pair<Int, Int>? {
+        for (a in slots.indices) for (s in slots[a].indices) if (slots[a][s] == code) return a to s
+        return null
+    }
+
+    fun actionOf(code: String): Action? = find(code)?.let { Action.entries[it.first] }
+
+    fun assign(a: Int, s: Int, code: String, label: (String) -> String): Result? {
+        val cur = slots[a][s]
+        if (cur == code) return null
+        val at = find(code)
+        var msg = "${label(code)} ahora es ${Action.entries[a].label}"
+        if (at != null) {
+            val (oa, os) = at
+            if (oa != a && cur == null && count(oa) == 1) {
+                return Result("${label(code)} es el único botón de ${Action.entries[oa].label}. Dale otro primero.", true)
+            }
+            slots[oa][os] = cur   // intercambio (cur puede ser vacío)
+            if (oa != a) {
+                msg = if (cur != null) "Intercambio: ${label(code)} ahora es ${Action.entries[a].label} y ${label(cur)} es ${Action.entries[oa].label}"
+                else "${label(code)} pasa de ${Action.entries[oa].label} a ${Action.entries[a].label}"
+            }
+        }
+        slots[a][s] = code
+        normalize()
+        return Result(msg, false)
+    }
+
+    fun clear(a: Int, s: Int): Result? {
+        if (slots[a][s] == null) return null
+        if (count(a) <= 1) return Result("Cada acción necesita al menos un botón", true)
+        slots[a][s] = null
+        normalize()
+        return Result("Botón quitado de ${Action.entries[a].label}", false)
+    }
+
+    /** El primer hueco nunca queda vacío si el segundo tiene algo. */
+    private fun normalize() {
+        for (row in slots) if (row[0] == null && row[1] != null) { row[0] = row[1]; row[1] = null }
+    }
+
+    /** Válida si cada acción tiene 1–2 botones y ningún botón se repite. */
+    fun isValid(): Boolean {
+        val seen = HashSet<String>()
+        for (a in slots.indices) {
+            val c = codes(a)
+            if (c.isEmpty() || c.size > Bindings.MAX_PER_ACTION) return false
+            for (code in c) if (!seen.add(code)) return false
+        }
+        return true
+    }
+}
+
 object Bindings {
+    const val MAX_PER_ACTION = 2
     private const val PREFS = "faro-hundido"
-    private val custom = HashMap<Action, String>()
+    private var custom: Layout? = null
 
     fun load() {
-        custom.clear()
+        custom = null
         runCatching {
             val p = Gdx.app.getPreferences(PREFS)
+            val slots = Array(Action.entries.size) { arrayOfNulls<String>(MAX_PER_ACTION) }
+            var any = false
             for (a in Action.entries) {
-                val v = p.getString("pad.${a.name}", "")
-                if (v.isNotEmpty()) custom[a] = v
+                val raw = p.getString("pad.${a.name}", "")
+                val codes = raw.split(',').map { it.trim() }.filter { isWellFormed(it) }.take(MAX_PER_ACTION)
+                codes.forEachIndexed { i, c -> slots[a.ordinal][i] = c }
+                if (codes.isNotEmpty()) any = true
             }
+            val l = Layout(slots)
+            // Datos dañados o editados a mano: se descartan y se usan los de por defecto.
+            if (any && l.isValid()) custom = l
         }
     }
 
-    fun save() {
+    private fun isWellFormed(code: String): Boolean = when {
+        code.length < 2 -> false
+        code[0] == 'b' -> code.substring(1).toIntOrNull() != null
+        code[0] == 'a' -> (code.last() == '+' || code.last() == '-') && code.substring(1, code.length - 1).toIntOrNull() != null
+        else -> false
+    }
+
+    fun commit(l: Layout) {
+        if (!l.isValid()) return
+        custom = l.copy()
         runCatching {
             val p = Gdx.app.getPreferences(PREFS)
-            for (a in Action.entries) {
-                val v = custom[a]
-                if (v != null) p.putString("pad.${a.name}", v) else p.remove("pad.${a.name}")
-            }
+            for (a in Action.entries) p.putString("pad.${a.name}", l.codes(a.ordinal).joinToString(","))
             p.flush()
         }
     }
 
-    fun set(a: Action, code: String) { custom[a] = code }
-
     fun reset() {
-        custom.clear()
-        save()
-    }
-
-    fun isCustom() = custom.isNotEmpty()
-
-    private fun defaults(m: ControllerMapping, a: Action): List<String> {
-        val buttons = when (a) {
-            Action.ATTACK -> listOf(m.buttonR2, m.buttonR1, m.buttonX)
-            Action.DASH -> listOf(m.buttonA)
-            Action.HAZ -> listOf(m.buttonL2, m.buttonL1, m.buttonB)
-            Action.USE -> listOf(m.buttonY)
+        custom = null
+        runCatching {
+            val p = Gdx.app.getPreferences(PREFS)
+            for (a in Action.entries) p.remove("pad.${a.name}")
+            p.flush()
         }
-        return buttons.filter { it >= 0 }.map { "b$it" }
     }
 
-    fun codes(c: Controller, a: Action): List<String> =
-        custom[a]?.let { listOf(it) } ?: defaults(c.mapping, a)
+    val isCustom get() = custom != null
+
+    /**
+     * Por defecto (disposición Xbox, §3): Farol RT + X · Destello A + RB · Haz LT + B · Usar Y.
+     * LB queda libre para quien quiera usarlo.
+     */
+    fun defaults(m: ControllerMapping): Layout {
+        val wanted = listOf(
+            listOf(m.buttonR2, m.buttonX),
+            listOf(m.buttonA, m.buttonR1),
+            listOf(m.buttonL2, m.buttonB),
+            listOf(m.buttonY),
+        )
+        val used = HashSet<Int>()
+        val slots = Array(Action.entries.size) { a ->
+            val codes = wanted[a].filter { it >= 0 && used.add(it) }.take(MAX_PER_ACTION).map { "b$it" }
+            Array(MAX_PER_ACTION) { codes.getOrNull(it) }
+        }
+        return Layout(slots)
+    }
+
+    fun layout(c: Controller): Layout = custom ?: defaults(c.mapping)
+
+    fun codes(c: Controller, a: Action): List<String> = layout(c).codes(a.ordinal)
 
     fun isActive(c: Controller, code: String): Boolean {
         if (code.length < 2) return false
@@ -83,9 +170,12 @@ object Bindings {
 
     /** Nombre corto del botón para mostrarlo en pantalla. */
     fun label(c: Controller?, code: String): String {
-        if (c == null) return "?"
+        if (code.startsWith("a")) {
+            val idx = code.substring(1, code.length - 1)
+            return "Eje $idx${code.last()}"
+        }
+        if (c == null) return "Botón ${code.substring(1)}"
         val m = c.mapping
-        if (code.startsWith("a")) return "Eje ${code.substring(1)}"
         return when (code.substring(1).toIntOrNull()) {
             m.buttonA -> "A"
             m.buttonB -> "B"
@@ -95,6 +185,12 @@ object Bindings {
             m.buttonR1 -> "RB"
             m.buttonL2 -> "LT"
             m.buttonR2 -> "RT"
+            m.buttonLeftStick -> "L3"
+            m.buttonRightStick -> "R3"
+            m.buttonDpadUp -> "Cruceta arriba"
+            m.buttonDpadDown -> "Cruceta abajo"
+            m.buttonDpadLeft -> "Cruceta izq."
+            m.buttonDpadRight -> "Cruceta der."
             m.buttonStart -> "Start"
             m.buttonBack -> "Select"
             else -> "Botón ${code.substring(1)}"
@@ -103,6 +199,6 @@ object Bindings {
 
     fun label(c: Controller?, a: Action): String {
         if (c == null) return "?"
-        return codes(c, a).firstOrNull()?.let { label(c, it) } ?: "—"
+        return codes(c, a).firstOrNull()?.let { label(c, it) } ?: "-"
     }
 }

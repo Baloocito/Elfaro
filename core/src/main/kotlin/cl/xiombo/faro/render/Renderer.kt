@@ -204,7 +204,15 @@ class Renderer : Disposable {
         else -> "Pulsa una tecla para $what"
     }
 
+    private fun actionColor(a: Action): Color = when (a) {
+        Action.ATTACK -> Pal.LAMP
+        Action.DASH -> Pal.FOAM
+        Action.HAZ -> Pal.CORAL
+        Action.USE -> Pal.MEDUSA
+    }
+
     private fun drawMenu(m: PauseMenu, pad: Gamepad, c: Controls) {
+        if (m.mode == PauseMenu.Mode.CONFIG) { drawConfig(m, pad, c); return }
         val bw = Gdx.graphics.backBufferWidth
         val bh = Gdx.graphics.backBufferHeight
         Gdx.gl.glViewport(ox, oy, iw * scale, ih * scale)
@@ -214,50 +222,210 @@ class Renderer : Disposable {
         col(Pal.OUTLINE, 0.82f)
         shapes.rect(0f, 0f, iw.toFloat(), ih.toFloat())
         val x0 = (iw - PauseMenu.ITEM_W) / 2f
-        if (m.remap < 0) {
-            PauseMenu.ITEMS.forEachIndexed { i, _ ->
-                val y = PauseMenu.ITEM_Y0 - i * PauseMenu.ITEM_STEP
-                col(if (i == m.sel) Pal.LAMP else Pal.NIGHT, if (i == m.sel) 0.9f else 0.8f)
-                shapes.rect(x0, y - PauseMenu.ITEM_H / 2f, PauseMenu.ITEM_W, PauseMenu.ITEM_H)
-            }
-        } else {
-            // Progreso de la reasignación
-            Action.entries.forEachIndexed { i, _ ->
-                col(if (i < m.remap) Pal.LAMP else if (i == m.remap) Pal.LAMP_HI else Pal.NIGHT)
-                shapes.rect(iw / 2f - 46f + i * 24f, 120f, 20f, 4f)
-            }
+        PauseMenu.ITEMS.forEachIndexed { i, _ ->
+            val y = PauseMenu.ITEM_Y0 - i * PauseMenu.ITEM_STEP
+            col(if (i == m.sel) Pal.LAMP else Pal.NIGHT, if (i == m.sel) 0.9f else 0.8f)
+            shapes.rect(x0, y - PauseMenu.ITEM_H / 2f, PauseMenu.ITEM_W, PauseMenu.ITEM_H)
         }
         shapes.end()
 
         Gdx.gl.glViewport(0, 0, bw, bh)
         batch.projectionMatrix = screenProj
         batch.begin()
-        text("PAUSA", iw / 2f, 222f, Pal.LAMP, align = 0)
-        if (m.remap < 0) {
-            PauseMenu.ITEMS.forEachIndexed { i, label ->
-                val y = PauseMenu.ITEM_Y0 - i * PauseMenu.ITEM_STEP + 5f
-                text(label, iw / 2f, y, if (i == m.sel) Pal.OUTLINE else Pal.CREAM, align = 0)
-            }
-            val ctl = pad.controller
-            val info = if (ctl == null) "Sin mando conectado" else "Mando: ${ctl.name.take(40)}"
-            text(info, iw / 2f, 68f, Pal.SHELL, align = 0)
-            if (ctl != null) {
-                val map = Action.entries.joinToString("   ") { "${it.label}: ${Bindings.label(ctl, it)}" }
-                text(map, iw / 2f, 54f, Pal.CREAM, align = 0)
-            }
-        } else {
-            val a = Action.entries[m.remap]
-            text("Pulsa el botón para", iw / 2f, 170f, Pal.CREAM, align = 0)
-            text(a.label.uppercase(), iw / 2f, 150f, Pal.LAMP_HI, align = 0)
-            text("Los gatillos también sirven  ·  Start para cancelar", iw / 2f, 100f, Pal.SHELL, align = 0)
+        text("PAUSA", iw / 2f, 210f, Pal.LAMP, align = 0)
+        PauseMenu.ITEMS.forEachIndexed { i, label ->
+            val y = PauseMenu.ITEM_Y0 - i * PauseMenu.ITEM_STEP + 5f
+            text(label, iw / 2f, y, if (i == m.sel) Pal.OUTLINE else Pal.CREAM, align = 0)
         }
-        if (m.note.isNotEmpty()) text(m.note, iw / 2f, 36f, Pal.FOAM, align = 0)
+        val ctl = pad.controller
+        text(if (ctl == null) "Sin mando conectado" else "Mando: ${ctl.name.take(40)}", iw / 2f, 70f, Pal.SHELL, align = 0)
+        if (m.note.isNotEmpty() && m.noteT > 0f) text(m.note, iw / 2f, 46f, if (m.noteError) Pal.CORAL else Pal.FOAM, align = 0)
         val hint = when {
-            c.padActive || pad.controller != null -> "Stick o cruceta para elegir  ·  A aceptar  ·  B volver"
+            c.padActive || ctl != null -> "Stick o cruceta para elegir  ·  A aceptar  ·  B volver"
             c.touch -> "Toca una opción"
             else -> "Flechas para elegir  ·  Enter aceptar  ·  Esc volver"
         }
         text(hint, iw / 2f, 18f, Pal.SHELL, align = 0)
+        batch.end()
+        font.color = Color.WHITE
+    }
+
+    /** Una pieza del mando dibujado: círculo o rectángulo con el botón que representa. */
+    private class PadEl(val round: Boolean, val x: Float, val y: Float, val w: Float, val h: Float, val label: String, val reserved: Boolean, val code: (com.badlogic.gdx.controllers.ControllerMapping) -> Int)
+
+    private val padEls: List<PadEl> by lazy {
+        val cx = 120f
+        val cy = 132f
+        listOf(
+            PadEl(false, cx - 80f, cy + 44f, 32f, 9f, "LT", false) { it.buttonL2 },
+            PadEl(false, cx - 80f, cy + 33f, 32f, 8f, "LB", false) { it.buttonL1 },
+            PadEl(false, cx + 48f, cy + 44f, 32f, 9f, "RT", false) { it.buttonR2 },
+            PadEl(false, cx + 48f, cy + 33f, 32f, 8f, "RB", false) { it.buttonR1 },
+            PadEl(true, cx - 48f, cy + 8f, 10f, 10f, "L3", false) { it.buttonLeftStick },
+            PadEl(true, cx + 22f, cy - 16f, 10f, 10f, "R3", false) { it.buttonRightStick },
+            PadEl(true, cx + 50f, cy + 19f, 6f, 6f, "Y", false) { it.buttonY },
+            PadEl(true, cx + 50f, cy - 3f, 6f, 6f, "A", false) { it.buttonA },
+            PadEl(true, cx + 39f, cy + 8f, 6f, 6f, "X", false) { it.buttonX },
+            PadEl(true, cx + 61f, cy + 8f, 6f, 6f, "B", false) { it.buttonB },
+            PadEl(false, cx - 16f, cy + 14f, 10f, 5f, "", true) { it.buttonBack },
+            PadEl(false, cx + 6f, cy + 14f, 10f, 5f, "", true) { it.buttonStart },
+            PadEl(false, cx - 26f, cy - 13f, 8f, 6f, "", true) { it.buttonDpadUp },
+            PadEl(false, cx - 26f, cy - 25f, 8f, 6f, "", true) { it.buttonDpadDown },
+            PadEl(false, cx - 33f, cy - 19f, 7f, 6f, "", true) { it.buttonDpadLeft },
+            PadEl(false, cx - 18f, cy - 19f, 7f, 6f, "", true) { it.buttonDpadRight },
+        )
+    }
+
+    /**
+     * Configurar mando: a la izquierda el mando dibujado (cada botón con el color de su acción y
+     * encendido mientras se pulsa); a la derecha la tabla de acciones con dos huecos cada una.
+     */
+    private fun drawConfig(m: PauseMenu, pad: Gamepad, c: Controls) {
+        val bw = Gdx.graphics.backBufferWidth
+        val bh = Gdx.graphics.backBufferHeight
+        val l = m.layout ?: return
+        val ctrl = pad.controller
+        val blink = (System.currentTimeMillis() / 250L) % 2L == 0L
+        Gdx.gl.glViewport(ox, oy, iw * scale, ih * scale)
+        Gdx.gl.glEnable(GL20.GL_BLEND)
+        shapes.projectionMatrix = internalProj
+        shapes.begin(ShapeType.Filled)
+        col(Pal.OUTLINE, 0.92f)
+        shapes.rect(0f, 0f, iw.toFloat(), ih.toFloat())
+
+        // Cuerpo del mando
+        val cx = 120f
+        val cy = 132f
+        col(Pal.NIGHT)
+        shapes.rect(cx - 62f, cy - 22f, 124f, 52f)
+        shapes.circle(cx - 56f, cy - 20f, 24f, 24)
+        shapes.circle(cx + 56f, cy - 20f, 24f, 24)
+        col(Pal.WALL)
+        shapes.rect(cx - 60f, cy + 24f, 120f, 4f)
+        // Sticks (siempre mueven / apuntan)
+        val lsx = cx - 48f + pad.lx * 4f
+        val lsy = cy + 8f + pad.ly * 4f
+        val rsx = cx + 22f + pad.rx * 4f
+        val rsy = cy - 16f + pad.ry * 4f
+        col(Pal.OUTLINE)
+        shapes.circle(cx - 48f, cy + 8f, 13f, 20)
+        shapes.circle(cx + 22f, cy - 16f, 13f, 20)
+
+        for (e in padEls) {
+            val idx = if (ctrl != null) e.code(ctrl.mapping) else -1
+            val codeStr = "b$idx"
+            val action = if (idx >= 0) l.actionOf(codeStr) else null
+            val pressed = ctrl != null && idx >= 0 && ctrl.getButton(idx)
+            val selectedTarget = m.capturing && blink && action == null
+            val fill = when {
+                pressed -> Color.WHITE
+                e.reserved -> Pal.WALL_TOP
+                action != null -> actionColor(action)
+                selectedTarget -> Pal.SEAM
+                else -> Pal.WALL
+            }
+            val px = if (e.label == "L3") lsx else if (e.label == "R3") rsx else e.x
+            val py = if (e.label == "L3") lsy else if (e.label == "R3") rsy else e.y
+            if (e.round) {
+                col(Pal.OUTLINE)
+                shapes.circle(px, py, e.w + 1f, 16)
+                col(fill)
+                shapes.circle(px, py, e.w, 16)
+            } else {
+                outlined(px, py, e.w, e.h, fill)
+            }
+        }
+
+        // Tabla
+        Action.entries.forEachIndexed { r, a ->
+            val y = PauseMenu.rowY(r)
+            col(actionColor(a))
+            shapes.rect(PauseMenu.LABEL_X, y - PauseMenu.CELL_H / 2f, 4f, PauseMenu.CELL_H)
+            val active = ctrl != null && l.codes(r).any { Bindings.isActive(ctrl, it) }
+            for (s in 0 until Bindings.MAX_PER_ACTION) {
+                val x = PauseMenu.SLOT_X[s]
+                val sel = r == m.row && s == m.col
+                if (sel) {
+                    col(if (m.capturing && blink) Pal.LAMP_HI else Pal.LAMP)
+                    shapes.rect(x - 2f, y - PauseMenu.CELL_H / 2f - 2f, PauseMenu.SLOT_W + 4f, PauseMenu.CELL_H + 4f)
+                }
+                val code = l.slots[r][s]
+                col(
+                    when {
+                        code != null && ctrl != null && Bindings.isActive(ctrl, code) -> actionColor(a)
+                        code != null -> Pal.WALL
+                        else -> Pal.NIGHT
+                    }
+                )
+                shapes.rect(x, y - PauseMenu.CELL_H / 2f, PauseMenu.SLOT_W, PauseMenu.CELL_H)
+                if (code != null) {
+                    col(actionColor(a))
+                    shapes.rect(x, y - PauseMenu.CELL_H / 2f, 3f, PauseMenu.CELL_H)
+                }
+            }
+            if (active) {
+                col(actionColor(a), 0.35f)
+                shapes.rect(PauseMenu.LABEL_X + 4f, y - PauseMenu.CELL_H / 2f, PauseMenu.LABEL_W - 4f, PauseMenu.CELL_H)
+            }
+        }
+        if (m.capturing) {
+            val k = (m.captureT / PauseMenu.CAPTURE_TIME).coerceIn(0f, 1f)
+            val x = PauseMenu.SLOT_X[m.col]
+            col(Pal.LAMP_HI)
+            shapes.rect(x, PauseMenu.rowY(m.row) - PauseMenu.CELL_H / 2f - 5f, PauseMenu.SLOT_W * k, 2f)
+        }
+        // Botones táctiles / de ratón
+        for (i in PauseMenu.BTN_X.indices) {
+            col(if (i == 1) Pal.LAMP else Pal.NIGHT, 0.9f)
+            shapes.rect(PauseMenu.BTN_X[i], PauseMenu.BTN_Y - PauseMenu.BTN_H / 2f, PauseMenu.BTN_W, PauseMenu.BTN_H)
+        }
+        shapes.end()
+
+        Gdx.gl.glViewport(0, 0, bw, bh)
+        batch.projectionMatrix = screenProj
+        batch.begin()
+        text("CONFIGURAR MANDO", iw / 2f, 248f, Pal.LAMP, align = 0)
+        text(if (ctrl == null) "Mando desconectado" else ctrl.name.take(44), iw / 2f, 232f, Pal.SHELL, align = 0)
+        text("Acción", PauseMenu.LABEL_X + 8f, PauseMenu.ROW_Y0 + 22f, Pal.SHELL)
+        text("Botón 1", PauseMenu.SLOT_X[0] + PauseMenu.SLOT_W / 2f, PauseMenu.ROW_Y0 + 22f, Pal.SHELL, align = 0)
+        text("Botón 2", PauseMenu.SLOT_X[1] + PauseMenu.SLOT_W / 2f, PauseMenu.ROW_Y0 + 22f, Pal.SHELL, align = 0)
+        Action.entries.forEachIndexed { r, a ->
+            val y = PauseMenu.rowY(r) + 5f
+            text(a.label, PauseMenu.LABEL_X + 8f, y, Pal.CREAM)
+            for (s in 0 until Bindings.MAX_PER_ACTION) {
+                val code = l.slots[r][s]
+                val sel = r == m.row && s == m.col
+                val label = when {
+                    sel && m.capturing -> "Pulsa..."
+                    code != null -> Bindings.label(ctrl, code)
+                    else -> "-"
+                }
+                text(label, PauseMenu.SLOT_X[s] + PauseMenu.SLOT_W / 2f, y, if (sel) Pal.LAMP_HI else Pal.CREAM, align = 0)
+            }
+        }
+        // Etiquetas del mando dibujado
+        for (e in padEls) if (e.label.isNotEmpty()) {
+            val lx = if (e.round) e.x else e.x + e.w / 2f
+            val ly = if (e.round) e.y + 4f else e.y + e.h + 9f
+            val labelY = if (e.label == "LT" || e.label == "RT") e.y + e.h + 10f else if (e.label == "LB" || e.label == "RB") e.y - 2f else ly
+            if (e.label == "LB" || e.label == "RB") continue  // LB/RB se leen junto a LT/RT
+            val idx = if (ctrl != null) e.code(ctrl.mapping) else -1
+            val onColor = e.round && idx >= 0 && l.actionOf("b$idx") != null
+            text(e.label, lx, labelY, if (onColor) Pal.OUTLINE else Pal.CREAM, align = 0)
+        }
+        text("LB", 120f - 64f, 132f + 30f, Pal.CREAM, align = 0)
+        text("RB", 120f + 64f, 132f + 30f, Pal.CREAM, align = 0)
+        text("Cruceta: mover · Start: pausa", 120f, 84f, Pal.SHELL, align = 0)
+
+        text("Por defecto", PauseMenu.BTN_X[0] + PauseMenu.BTN_W / 2f, PauseMenu.BTN_Y + 5f, Pal.CREAM, align = 0)
+        text("Guardar", PauseMenu.BTN_X[1] + PauseMenu.BTN_W / 2f, PauseMenu.BTN_Y + 5f, Pal.OUTLINE, align = 0)
+
+        if (m.note.isNotEmpty() && m.noteT > 0f) {
+            text(m.note, iw / 2f, 40f, if (m.noteError) Pal.CORAL else Pal.FOAM, align = 0, wrap = iw * 0.9f)
+        }
+        val hint = if (ctrl != null || c.padActive) "A asignar  ·  X quitar  ·  Y por defecto  ·  B guardar y salir"
+        else "Enter asignar  ·  Supr quitar  ·  R por defecto  ·  Esc guardar y salir"
+        text(hint, iw / 2f, 16f, Pal.SHELL, align = 0)
         batch.end()
         font.color = Color.WHITE
     }
