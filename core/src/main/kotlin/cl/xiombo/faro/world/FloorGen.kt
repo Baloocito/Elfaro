@@ -194,18 +194,22 @@ object FloorGen {
         // Salas grandes: une pares de celdas de combate vecinas (1 en el piso 1, hasta 2 después).
         val bigTarget = min(2, 1 + floor / 2)
         val pairs = ArrayList<Pair<Cell, Cell>>()
+        fun mergeable(c: Cell) = c.type == CellType.COMBAT || c.type == CellType.ELITE
         for (c in map.all) {
-            if (c.type != CellType.COMBAT) continue
+            if (!mergeable(c)) continue
             for (d in listOf(Dir.RIGHT, Dir.UP)) {
                 val n = map.neighbor(c, d) ?: continue
-                if (n.type == CellType.COMBAT) pairs += c to n
+                if (mergeable(n)) pairs += c to n
             }
         }
+        // Cada hueco de sala grande sale con un 65 %; luego se cubre con pares que no se pisen.
+        // Una élite unida a una de combate hace élite toda la sala grande.
+        val want = (0 until bigTarget).count { rng.nextFloat() >= 0.35f }
         var made = 0
         for ((a, b) in pairs.shuffled(rng)) {
-            if (made >= bigTarget) break
+            if (made >= want) break
             if (a.partner != null || b.partner != null) continue
-            if (rng.nextFloat() < 0.35f) continue
+            if (a.type == CellType.ELITE || b.type == CellType.ELITE) { a.type = CellType.ELITE; b.type = CellType.ELITE }
             a.partner = b; a.anchor = true
             b.partner = a; b.anchor = false
             made++
