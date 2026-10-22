@@ -785,7 +785,7 @@ class World private constructor(val seed: Long, val kind: Kind) {
                 player.weapon = w
                 stockSanctuary()
                 fx.burst(p.x, p.y + 6f, 12, Pal.LAMP_HI, 80f, 0.4f)
-                showBanner("${w.label.uppercase()} EQUIPADO", 1.6f)
+                showBanner("ARMA EQUIPADA: ${w.label.uppercase()}", 1.6f)
             }
             PedKind.INICIAL -> {
                 val e = p.exvoto ?: return

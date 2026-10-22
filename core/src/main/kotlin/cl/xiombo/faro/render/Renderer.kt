@@ -777,7 +777,7 @@ class Renderer : Disposable {
             outlined(lx - 2f, ly - 2f, 4f, 4f, if (w.gameOver) Pal.SEAM else Pal.LAMP)
         } else {
             outlined(x - (if (p.aimX >= 0f) 7f else -4f), y + 1f, 3f, 3f, Pal.LAMP)
-            if (p.weapon != Weapon.ARPON || p.harpoon == null) drawWeaponIcon(p.weapon, lx, ly + 1f, weaponColor(p.weapon))
+            if (p.weapon != Weapon.ARPON || p.harpoon == null) drawWeaponIcon(p.weapon, lx + (if (kotlin.math.abs(p.aimX) < 0.4f) 8f else 0f), ly + 1f, weaponColor(p.weapon))
         }
     }
 
@@ -1245,7 +1245,7 @@ class Renderer : Disposable {
                 if (d != null) {
                     val mm = (d.time / 60f).toInt()
                     val ss = (d.time % 60f).toInt()
-                    text("TE APAGÓ", iw / 2f, 190f, Pal.CORAL, align = 0)
+                    text(if (d.cause.startsWith("Abandonaste")) "RUN ABANDONADA" else "TE APAGÓ", iw / 2f, 190f, Pal.CORAL, align = 0)
                     text(d.cause, iw / 2f, 174f, Pal.LAMP_HI, align = 0)
                     text("Piso ${d.floor}  ·  sala ${d.roomType}  ·  entraste con ${d.entryLuz} de Luz", iw / 2f, 152f, Pal.CREAM, align = 0)
                     text((if (d.enemiesLeft == 1) "Quedaba 1 enemigo" else "Quedaban ${d.enemiesLeft} enemigos") + "  ·  ${mm}:${ss.toString().padStart(2, '0')}  ·  ${w.kills} bajas  ·  ${w.owned.size} exvotos", iw / 2f, 136f, Pal.CREAM, align = 0)

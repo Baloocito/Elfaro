@@ -20,7 +20,7 @@ enum class Weapon(
     ARPON("Arpón", 8, 2, 14, 0.35f,
         "A distancia: 14 de daño y perfora 2. Recógelo o espera a que vuelva.", "+1 perforación y vuelve 0,3 s antes"),
     ANCLA("Ancla", 15, 4, 18, 0.25f,
-        "Lenta y pesada: 22 de daño en 180°. Empuja y aturde contra las paredes.", "+10 px de empuje y +0,2 s de aturdido"),
+        "Lenta y pesada: 22 de daño en 180 grados. Empuja y aturde contra las paredes.", "+10 px de empuje y +0,2 s de aturdido"),
     CAMPANA("Campana", 10, 6, 20, 0.3f,
         "Pulso alrededor de Isla: 10 de daño y aturde 0,6 s. Abre paredes agrietadas.", "+8 px de radio");
 
