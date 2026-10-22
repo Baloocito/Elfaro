@@ -1,56 +1,485 @@
 [
   {
-    "id": "ahogado", "name": "Ahogado", "biome": "muelle",
-    "hp": 40, "dmg": 10, "speed": 40, "cost": 2,
-    "body": [12, 12], "luzDrop": [1, 2],
-    "attack": { "kind": "lunge", "range": 40, "telegraph": 0.4, "cooldown": 1.8 }
+    "id": "ahogado",
+    "name": "Ahogado",
+    "biome": "muelle",
+    "hp": 40,
+    "dmg": 10,
+    "speed": 40,
+    "cost": 2,
+    "body": [
+      12,
+      12
+    ],
+    "luzDrop": [
+      1,
+      2
+    ],
+    "attack": {
+      "kind": "lunge",
+      "range": 40,
+      "telegraph": 0.4,
+      "cooldown": 1.8
+    }
   },
   {
-    "id": "medusa", "name": "Medusa-farol", "biome": "muelle",
-    "hp": 24, "dmg": 8, "speed": 30, "cost": 2,
-    "body": [12, 12], "luzDrop": [1, 2],
-    "attack": { "kind": "pulse", "range": 24, "telegraph": 0.6, "cooldown": 2.4 }
+    "id": "medusa",
+    "name": "Medusa-farol",
+    "biome": "muelle",
+    "hp": 24,
+    "dmg": 8,
+    "speed": 30,
+    "cost": 2,
+    "body": [
+      12,
+      12
+    ],
+    "luzDrop": [
+      1,
+      2
+    ],
+    "attack": {
+      "kind": "pulse",
+      "range": 24,
+      "telegraph": 0.6,
+      "cooldown": 2.4
+    }
   },
   {
-    "id": "cangrejo", "name": "Cangrejo-relicario", "biome": "muelle",
-    "hp": 60, "dmg": 12, "speed": 55, "cost": 3,
-    "body": [18, 12], "luzDrop": [1, 2],
-    "attack": { "kind": "pinch", "range": 22, "telegraph": 0.45, "cooldown": 1.4 }
+    "id": "cangrejo",
+    "name": "Cangrejo-relicario",
+    "biome": "muelle",
+    "hp": 60,
+    "dmg": 12,
+    "speed": 55,
+    "cost": 3,
+    "body": [
+      18,
+      12
+    ],
+    "luzDrop": [
+      1,
+      2
+    ],
+    "attack": {
+      "kind": "pinch",
+      "range": 22,
+      "telegraph": 0.45,
+      "cooldown": 1.4
+    }
   },
   {
-    "id": "sirena", "name": "La Sirena de Brea", "biome": "jefe",
-    "hp": 900, "dmg": 10, "speed": 40, "cost": 0,
-    "body": [28, 20], "luzDrop": [0, 0],
-    "attack": { "kind": "song", "range": 0, "telegraph": 0.6, "cooldown": 1.0 }
+    "id": "sirena",
+    "name": "La Sirena de Brea",
+    "biome": "jefe",
+    "hp": 900,
+    "dmg": 10,
+    "speed": 40,
+    "cost": 0,
+    "body": [
+      28,
+      20
+    ],
+    "luzDrop": [
+      0,
+      0
+    ],
+    "attack": {
+      "kind": "song",
+      "range": 0,
+      "telegraph": 0.6,
+      "cooldown": 1.0
+    }
   },
   {
-    "id": "monaguillo", "name": "Monaguillo de sal", "biome": "catedral",
-    "hp": 36, "dmg": 9, "speed": 45, "cost": 3,
-    "body": [10, 12], "luzDrop": [1, 2],
-    "attack": { "kind": "fan", "range": 150, "telegraph": 0.5, "cooldown": 2.2 }
+    "id": "monaguillo",
+    "name": "Monaguillo de sal",
+    "biome": "catedral",
+    "hp": 36,
+    "dmg": 9,
+    "speed": 45,
+    "cost": 3,
+    "body": [
+      10,
+      12
+    ],
+    "luzDrop": [
+      1,
+      2
+    ],
+    "attack": {
+      "kind": "fan",
+      "range": 150,
+      "telegraph": 0.5,
+      "cooldown": 2.2
+    }
   },
   {
-    "id": "campanero", "name": "Campanero", "biome": "catedral",
-    "hp": 90, "dmg": 16, "speed": 28, "cost": 5,
-    "body": [14, 16], "luzDrop": [2, 3],
-    "attack": { "kind": "wave", "range": 96, "telegraph": 0.6, "cooldown": 4.0 }
+    "id": "campanero",
+    "name": "Campanero",
+    "biome": "catedral",
+    "hp": 90,
+    "dmg": 16,
+    "speed": 28,
+    "cost": 5,
+    "body": [
+      14,
+      16
+    ],
+    "luzDrop": [
+      2,
+      3
+    ],
+    "attack": {
+      "kind": "wave",
+      "range": 96,
+      "telegraph": 0.6,
+      "cooldown": 4.0
+    }
   },
   {
-    "id": "vela", "name": "Vela errante", "biome": "catedral",
-    "hp": 20, "dmg": 5, "speed": 110, "cost": 1,
-    "body": [8, 10], "luzDrop": [0, 1],
-    "attack": { "kind": "kamikaze", "range": 64, "telegraph": 0.3, "cooldown": 0.8 }
+    "id": "vela",
+    "name": "Vela errante",
+    "biome": "catedral",
+    "hp": 20,
+    "dmg": 5,
+    "speed": 110,
+    "cost": 1,
+    "body": [
+      8,
+      10
+    ],
+    "luzDrop": [
+      0,
+      1
+    ],
+    "attack": {
+      "kind": "kamikaze",
+      "range": 64,
+      "telegraph": 0.3,
+      "cooldown": 0.8
+    }
   },
   {
-    "id": "cofrade", "name": "Cofrade de coral", "biome": "catedral",
-    "hp": 110, "dmg": 16, "speed": 30, "cost": 5,
-    "body": [16, 16], "luzDrop": [2, 3],
-    "attack": { "kind": "line", "range": 64, "telegraph": 0.6, "cooldown": 2.0 }
+    "id": "cofrade",
+    "name": "Cofrade de coral",
+    "biome": "catedral",
+    "hp": 110,
+    "dmg": 16,
+    "speed": 30,
+    "cost": 5,
+    "body": [
+      16,
+      16
+    ],
+    "luzDrop": [
+      2,
+      3
+    ],
+    "attack": {
+      "kind": "line",
+      "range": 64,
+      "telegraph": 0.6,
+      "cooldown": 2.0
+    }
   },
   {
-    "id": "obispo", "name": "El Obispo Coral", "biome": "jefe",
-    "hp": 1500, "dmg": 14, "speed": 34, "cost": 0,
-    "body": [22, 26], "luzDrop": [0, 0],
-    "attack": { "kind": "sweep", "range": 48, "telegraph": 0.5, "cooldown": 1.4 }
+    "id": "obispo",
+    "name": "El Obispo Coral",
+    "biome": "jefe",
+    "hp": 1500,
+    "dmg": 14,
+    "speed": 34,
+    "cost": 0,
+    "body": [
+      22,
+      26
+    ],
+    "luzDrop": [
+      0,
+      0
+    ],
+    "attack": {
+      "kind": "sweep",
+      "range": 48,
+      "telegraph": 0.5,
+      "cooldown": 1.4
+    }
+  },
+  {
+    "id": "tinta",
+    "name": "Tinta",
+    "biome": "archivo",
+    "hp": 50,
+    "dmg": 10,
+    "speed": 60,
+    "cost": 3,
+    "body": [
+      12,
+      12
+    ],
+    "luzDrop": [
+      1,
+      2
+    ],
+    "attack": {
+      "kind": "lunge",
+      "range": 34,
+      "telegraph": 0.4,
+      "cooldown": 1.6
+    }
+  },
+  {
+    "id": "bibliotecario",
+    "name": "Bibliotecario sin rostro",
+    "biome": "archivo",
+    "hp": 120,
+    "dmg": 18,
+    "speed": 35,
+    "cost": 6,
+    "body": [
+      14,
+      18
+    ],
+    "luzDrop": [
+      2,
+      3
+    ],
+    "attack": {
+      "kind": "teleport",
+      "range": 22,
+      "telegraph": 0.45,
+      "cooldown": 3.5
+    }
+  },
+  {
+    "id": "polilla",
+    "name": "Polilla de papel",
+    "biome": "archivo",
+    "hp": 12,
+    "dmg": 4,
+    "speed": 90,
+    "cost": 1,
+    "body": [
+      8,
+      6
+    ],
+    "luzDrop": [
+      0,
+      1
+    ],
+    "attack": {
+      "kind": "swarm",
+      "range": 0,
+      "telegraph": 0,
+      "cooldown": 0
+    }
+  },
+  {
+    "id": "copista",
+    "name": "Copista",
+    "biome": "archivo",
+    "hp": 60,
+    "dmg": 12,
+    "speed": 40,
+    "cost": 4,
+    "body": [
+      12,
+      14
+    ],
+    "luzDrop": [
+      1,
+      2
+    ],
+    "attack": {
+      "kind": "line",
+      "range": 96,
+      "telegraph": 0.7,
+      "cooldown": 2.6
+    }
+  },
+  {
+    "id": "cartografo",
+    "name": "El Cartógrafo",
+    "biome": "jefe",
+    "hp": 2100,
+    "dmg": 14,
+    "speed": 40,
+    "cost": 0,
+    "body": [
+      22,
+      26
+    ],
+    "luzDrop": [
+      0,
+      0
+    ],
+    "attack": {
+      "kind": "compass",
+      "range": 0,
+      "telegraph": 0.4,
+      "cooldown": 2.5
+    }
+  },
+  {
+    "id": "anguila",
+    "name": "Anguila de raíz",
+    "biome": "raiz",
+    "hp": 70,
+    "dmg": 14,
+    "speed": 0,
+    "cost": 4,
+    "body": [
+      14,
+      12
+    ],
+    "luzDrop": [
+      1,
+      2
+    ],
+    "attack": {
+      "kind": "emerge",
+      "range": 16,
+      "telegraph": 0.5,
+      "cooldown": 2.5
+    }
+  },
+  {
+    "id": "hijo",
+    "name": "Hijo del faro",
+    "biome": "raiz",
+    "hp": 150,
+    "dmg": 20,
+    "speed": 70,
+    "cost": 7,
+    "body": [
+      12,
+      16
+    ],
+    "luzDrop": [
+      2,
+      3
+    ],
+    "attack": {
+      "kind": "mimic",
+      "range": 28,
+      "telegraph": 0.4,
+      "cooldown": 1.2
+    }
+  },
+  {
+    "id": "vidriero",
+    "name": "Vidriero",
+    "biome": "raiz",
+    "hp": 130,
+    "dmg": 14,
+    "speed": 35,
+    "cost": 5,
+    "body": [
+      18,
+      18
+    ],
+    "luzDrop": [
+      2,
+      3
+    ],
+    "attack": {
+      "kind": "slam",
+      "range": 26,
+      "telegraph": 0.6,
+      "cooldown": 2.2
+    }
+  },
+  {
+    "id": "ojo",
+    "name": "Ojo de la fosa",
+    "biome": "raiz",
+    "hp": 80,
+    "dmg": 12,
+    "speed": 0,
+    "cost": 4,
+    "body": [
+      14,
+      14
+    ],
+    "luzDrop": [
+      1,
+      2
+    ],
+    "attack": {
+      "kind": "ray",
+      "range": 320,
+      "telegraph": 0.8,
+      "cooldown": 2.5
+    }
+  },
+  {
+    "id": "lampara",
+    "name": "La Lámpara Madre",
+    "biome": "jefe",
+    "hp": 3200,
+    "dmg": 12,
+    "speed": 0,
+    "cost": 0,
+    "body": [
+      34,
+      34
+    ],
+    "luzDrop": [
+      0,
+      0
+    ],
+    "attack": {
+      "kind": "beams",
+      "range": 0,
+      "telegraph": 0.5,
+      "cooldown": 4.0
+    }
+  },
+  {
+    "id": "corazon",
+    "name": "Corazón de piedra",
+    "biome": "especial",
+    "hp": 1,
+    "dmg": 0,
+    "speed": 0,
+    "cost": 0,
+    "body": [
+      20,
+      20
+    ],
+    "luzDrop": [
+      0,
+      0
+    ],
+    "attack": {
+      "kind": "none",
+      "range": 0,
+      "telegraph": 0,
+      "cooldown": 0
+    }
+  },
+  {
+    "id": "clon",
+    "name": "Clon de papel",
+    "biome": "especial",
+    "hp": 60,
+    "dmg": 8,
+    "speed": 0,
+    "cost": 0,
+    "body": [
+      10,
+      16
+    ],
+    "luzDrop": [
+      0,
+      0
+    ],
+    "attack": {
+      "kind": "mirror",
+      "range": 28,
+      "telegraph": 0,
+      "cooldown": 0
+    }
   }
 ]

@@ -13,6 +13,8 @@ object Story {
     fun chapter(b: Biome): Pair<String, String> = when (b) {
         Biome.MUELLE -> "MUELLE AHOGADO" to "Las barcas siguen amarradas. Nadie volvió a soltarlas."
         Biome.CATEDRAL -> "CATEDRAL SUMERGIDA" to "Bajo el muelle, las campanas todavía tocan. No hay nadie para oírlas."
+        Biome.ARCHIVO -> "ARCHIVO DE LOS NÁUFRAGOS" to "Aquí se anotaba todo lo que la ciudad perdía. Las páginas siguen escribiéndose solas."
+        Biome.RAIZ -> "RAÍZ DEL FARO" to "La lámpara toca la fosa. Algo respira al otro lado del vidrio."
     }
 
     val SIRENA = Memory(
@@ -29,11 +31,40 @@ object Story {
             "alumbra\". Lo tomé por una broma de viejo. Debí escucharlo.",
     )
 
+    val CARTOGRAFO = Memory(
+        "Recuerdo de Elías, el cartógrafo del puerto",
+        "Dibujé la fosa durante treinta años. Cada vez que la lámpara giraba, la sombra del fondo crecía " +
+            "un poco. Le llevé los mapas al Farero. No se sorprendió: me pidió que los quemara. Entonces lo " +
+            "entendí. La luz no la espanta. La engorda.",
+    )
+
+    /** Tras la Lámpara Madre: la nota que dejó el Farero Antiguo (anticipa el final C). */
+    val LAMPARA = Memory(
+        "Lo que dejó escrito el Farero",
+        "Isla: si lees esto, la encendiste. Yo la apagué para que dejara de comer, y la ciudad se hundió " +
+            "con ella. Ninguna de las dos cosas era la correcta. Hay una tercera: bajar a oscuras y mirarla " +
+            "de frente. Yo no me atreví.",
+    )
+
     fun memoryOf(bossId: String): Memory? = when (bossId) {
         "sirena" -> SIRENA
         "obispo" -> OBISPO
+        "cartografo" -> CARTOGRAFO
+        "lampara" -> LAMPARA
         else -> null
     }
+
+    /** Finales (§9). C (dejar la oscuridad) llega con las Mareas en la F4. */
+    val FINAL_A = "FINAL A  ·  REENCENDER" to
+        "La lámpara vuelve a girar. Puerto Velatorio sube despacio a la superficie con sus barcas y sus " +
+        "campanas. Abajo, algo abre los ojos por primera vez en veinte años."
+    val FINAL_B = "FINAL B  ·  SER LA LÁMPARA" to
+        "Isla ha leído todas las botellas y entiende lo que hizo el Farero. Ocupa su lugar dentro de la " +
+        "lámpara. Mientras ella arda despacio, la criatura dormirá. La ciudad no sube, pero tampoco se hunde más."
+
+    const val LECTURA = "Reto: despeja la sala sin usar el Haz y el atril te dará un exvoto raro."
+    const val CORAZON = "Una raíz enorme late en el centro. Si la golpeas, despertará algo."
+    const val VICTORIA_FINAL = "Has llegado al fondo del faro. Las Mareas y el final C llegan en la F4."
 
     /** Amparo, la guardesa del faro: está encerrada en una celda del Muelle. Abre la tienda del Santuario. */
     val AMPARO = Memory(
@@ -52,5 +83,4 @@ object Story {
     )
 
     const val CAPILLA = "El altar pide luz. Lo que da a cambio brilla más."
-    const val VICTORIA_F2 = "Bajo la catedral, el Archivo de los Náufragos espera. Llega en la F3."
 }

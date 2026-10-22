@@ -42,6 +42,9 @@ object Meta {
     var startExvoto: String? = null
     val unlocks = HashSet<String>()
     val bosses = HashSet<String>()
+    /** Botellas con mensaje leídas (ids de [Bottles]). Todas abren el final B. */
+    val bottles = HashSet<String>()
+    val allBottles get() = Bottles.all.all { it.id in bottles }
 
     const val PESCADORA = "pescadora"
     const val ANCLA = "ancla"
@@ -58,6 +61,7 @@ object Meta {
             luzLevel = p.getInteger("meta.luz", 0).coerceIn(0, 2)
             unlocks.clear(); unlocks += p.getString("meta.unlocks", "").split(',').filter { it.isNotBlank() }
             bosses.clear(); bosses += p.getString("meta.bosses", "").split(',').filter { it.isNotBlank() }
+            bottles.clear(); bottles += p.getString("meta.bottles", "").split(',').filter { it.isNotBlank() }
             weapon = runCatching { Weapon.valueOf(p.getString("meta.weapon", "FAROL")) }.getOrDefault(Weapon.FAROL)
             if (!isUnlocked(weapon)) weapon = Weapon.FAROL
             startExvoto = p.getString("meta.startExvoto", "").ifBlank { null }
@@ -71,6 +75,7 @@ object Meta {
             p.putInteger("meta.luz", luzLevel)
             p.putString("meta.unlocks", unlocks.joinToString(","))
             p.putString("meta.bosses", bosses.joinToString(","))
+            p.putString("meta.bottles", bottles.joinToString(","))
             p.putString("meta.weapon", weapon.name)
             p.putString("meta.startExvoto", startExvoto ?: "")
             p.flush()

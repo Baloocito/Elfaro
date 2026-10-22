@@ -116,6 +116,7 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
     }
 
     fun update(w: World, inp: InputState, dt: Float) {
+        swingStarted = false
         val st = w.stats
         dashIframes -= dt
         hurtIframes -= dt
@@ -185,6 +186,7 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
             if (luz > cost) {
                 luz -= cost
                 hazT = Balance.HAZ_TIME
+                w.hazUsedInRoom = true
                 hazTick = 0
                 w.fx.floater("-${cost.toInt()}", cx, cy + 14f, Pal.LAMP)
             } else {
@@ -294,7 +296,11 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
     /** El Arpón solo se lanza si está en la mano. */
     private fun canAttack() = weapon != Weapon.ARPON || harpoon == null
 
+    /** Empezó un golpe en este tick (lo graba World para el clon de papel del Cartógrafo). */
+    var swingStarted = false
+
     private fun startSwing() {
+        swingStarted = true
         atkFrame = 0
         atkDx = aimX
         atkDy = aimY
@@ -391,6 +397,7 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
     /** Campana: pulso alrededor de Isla que daña, aturde y abre paredes agrietadas. */
     private fun bellPulse(w: World) {
         val r = swingRange
+        w.revealAt(cx, cy, r)
         w.fx.ring(cx, cy, r, Pal.SHELL)
         w.fx.ring(cx, cy, r * 0.6f, Pal.CREAM)
         for (e in w.enemies) {
@@ -480,6 +487,8 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
             val py = ey - aimY * t
             val r = half + e.radius
             if (px * px + py * py <= r * r) {
+                // El Haz quema a las polillas de una vez.
+                if (e is Polilla) { e.takeHit(w, e.hp + 1f, cx, cy, HitKind.HAZ); continue }
                 var d = Balance.HAZ_DPS * dt
                 if (e.isElite || e.isBoss) d *= w.stats.eliteBonus
                 e.takeHit(w, d, cx, cy, HitKind.HAZ)

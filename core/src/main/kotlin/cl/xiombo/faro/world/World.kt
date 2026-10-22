@@ -3,6 +3,7 @@ package cl.xiombo.faro.world
 import cl.xiombo.faro.data.Balance
 import cl.xiombo.faro.data.Balance.TILE
 import cl.xiombo.faro.data.Biome
+import cl.xiombo.faro.data.Bottles
 import cl.xiombo.faro.data.Story
 import cl.xiombo.faro.data.EnemyDefs
 import cl.xiombo.faro.data.ExvotoDef
@@ -28,8 +29,9 @@ import kotlin.math.sqrt
 import kotlin.random.Random
 
 /**
- * Un mundo: el Santuario entre runs, o una run: Muelle Ahogado (pisos 1-3, la Sirena de Brea) y
- * Catedral Sumergida (pisos 4-6, el Obispo Coral). Lógica determinista a 60 Hz (§11).
+ * Un mundo: el Santuario entre runs, o una run por los 4 biomas: Muelle Ahogado (1-3, la Sirena),
+ * Catedral Sumergida (4-6, el Obispo), Archivo de los Náufragos (7-9, el Cartógrafo) y Raíz del Faro
+ * (10-12, la Lámpara Madre). Lógica determinista a 60 Hz (§11).
  */
 class World private constructor(val seed: Long, val kind: Kind, val test: Boolean = false) {
     enum class Kind { SANCTUARY, RUN }
@@ -53,6 +55,14 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         const val MAPA_PRICE = 10
         const val BOSS_PERLAS = 5          // Sirena; el Obispo da 12 (§14)
         const val OBISPO_PERLAS = 12
+        const val CARTOGRAFO_PERLAS = 20
+        const val LAMPARA_PERLAS = 35
+        const val ATRIL_LIGHT = 48f
+        const val MOLTEN_BURN = 4f         // Luz por segundo sobre vidrio fundido
+        const val BEAT_PERIOD = 10f        // latido de la Raíz
+        const val BEAT_BOOST_TIME = 2f
+        const val SHELF_PERIOD = 6f
+        const val HISTORY = 240            // ticks de historia de Isla para el clon (4 s)
         const val DIM_TIME = 3f            // onda del Campanero
         const val CANDLE_LIGHT = 64f
         const val SUMMON_TELEGRAPH = 0.8f   // círculos de sal antes de cada invocación
@@ -124,6 +134,40 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
     val waves = ArrayList<Wave>()
     /** Onda del Campanero: segundos con la luz al 60 %. */
     var dimT = 0f
+        private set
+
+    // Archivo y Raíz
+    val traps = ArrayList<Trap>()
+    val lines = ArrayList<LineAttack>()
+    /** Rastro de tinta del Cartógrafo en la fase 3: (x, y, s restantes). */
+    val ink = ArrayList<FloatArray>()
+    /** Atriles de la sala (x, y). Se apagan en la fase 3 del Cartógrafo. */
+    val atriles = ArrayList<FloatArray>()
+    var atrilesOn = true
+        private set
+    private var shelfT = 0f
+    /** Latido de la Raíz: s hasta el próximo; durante [beatBoostT] los enemigos van un 30 % más rápido. */
+    var beatT = BEAT_PERIOD
+        private set
+    var beatBoostT = 0f
+        private set
+    private var moltenTick = 0f
+    /** Corazón de piedra golpeado: la sala pasa a ser de combate. */
+    private var heartAwake = false
+    /** Se usó el Haz en esta sala (reto de la Sala de lectura). */
+    var hasHazUsed = false
+        private set
+    var hazUsedInRoom: Boolean
+        get() = hasHazUsed
+        set(v) { hasHazUsed = v }
+    /** Ya salió una botella fuera de la Sala de lectura en esta run. */
+    private var bottleGiven = false
+    /** Historia de Isla para el clon de papel. */
+    class Snap(var x: Float = 0f, var y: Float = 0f, var attack: Boolean = false, var ax: Float = 1f, var ay: Float = 0f)
+    private val history = Array(HISTORY) { Snap() }
+    private var historyN = 0L
+    /** Eco de la Lámpara Madre (para teñir la sala). */
+    var echoBanner = ""
         private set
 
     // Historia: recuerdo del jefe y título de capítulo
@@ -267,7 +311,7 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
                 val k = runCatching { PedKind.valueOf(p.kind) }.getOrNull() ?: continue
                 val ex = p.exvoto?.let { id -> runCatching { Exvotos.get(id) }.getOrNull() }
                 val wp = p.weapon?.let { runCatching { Weapon.valueOf(it) }.getOrNull() }
-                c.pedestals += Pedestal(p.x, p.y, k, ex, p.price, wp).also { it.taken = p.taken }
+                c.pedestals += Pedestal(p.x, p.y, k, ex, p.price, wp, metaId = p.meta).also { it.taken = p.taken }
             }
         }
         val c = map[d.cellX, d.cellY] ?: map.start
@@ -298,6 +342,8 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
                 CellType.SANCTUARY -> "santuario"
                 CellType.CAPILLA -> "capilla"
                 CellType.CELDA -> "celda"
+                CellType.LECTURA -> "lectura"
+                CellType.CORAZON -> "corazon"
                 else -> "combate"
             }
         // Cada bioma usa sus plantillas propias si las tiene ("cat_combate"); si no, las comunes.
@@ -350,6 +396,13 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         boss = null
         brea = false
         waves.clear()
+        traps.clear(); lines.clear(); ink.clear()
+        atrilesOn = true
+        atriles.clear()
+        for (t in room.tilesOf(Room.ATRIL)) atriles += room.tileCenter(t[0], t[1])
+        shelfT = 0f
+        heartAwake = false
+        hasHazUsed = false
         hasCoral = false
         dimT = 0f
         candles.clear()
@@ -379,7 +432,9 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         if (anchor.type == CellType.REFUGE) revealMap()
         if (anchor.type == CellType.BOSS && !anchor.cleared) {
             val id = biome.bossId
-            val b = createEnemy(id, room.width / 2f, room.height - 64f, 1)
+            // La Lámpara Madre está fija en el centro de la arena.
+            val by = if (id == "lampara") room.height / 2f + 8f else room.height - 64f
+            val b = createEnemy(id, room.width / 2f, by, 1)
             enemies += b
             boss = b
             showBanner(b.def.name.uppercase(), 2.6f)
@@ -393,10 +448,24 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
                 CellType.ANTESALA -> showBanner(if (biome == Biome.CATEDRAL) "ANTESALA  ·  UN CORO REZA AL OTRO LADO" else "ANTESALA  ·  ALGO CANTA AL OTRO LADO")
                 CellType.CAPILLA -> showBanner("CAPILLA DE LA OFRENDA  ·  ${Story.CAPILLA.uppercase()}", 3f)
                 CellType.CELDA -> showBanner("UNA CELDA CUSTODIADA  ·  ALGUIEN PIDE AYUDA", 3f)
+                CellType.LECTURA -> showBanner("SALA DE LECTURA  ·  ${Story.LECTURA.uppercase()}", 3.2f)
+                CellType.CORAZON -> showBanner("CORAZÓN DE PIEDRA  ·  ${Story.CORAZON.uppercase()}", 3.2f)
                 else -> {}
             }
         }
         if (anchor.type == CellType.CELDA && anchor.cleared) anchor.pedestals.forEach { if (it.kind == PedKind.JAULA) it.selected = true }
+        // Ojos de la fosa: son parte de la sala (no del presupuesto) y hay que destruirlos para salir.
+        if (anchor.isCombat && !anchor.cleared && anchor.type != CellType.BOSS) {
+            for (e in tpl.eyes) {
+                val c = room.tileCenter(e[0], e[1])
+                enemies += createEnemy("ojo", c[0], c[1], floorNum, null)
+            }
+        }
+        // Corazón de piedra: late en el centro hasta que lo golpeas.
+        if (anchor.type == CellType.CORAZON && !anchor.cleared) {
+            val c = tpl.pedestals.firstOrNull()?.let { room.tileCenter(it[0], it[1]) } ?: floatArrayOf(room.width / 2f, room.height / 2f)
+            enemies += Corazon(EnemyDefs["corazon"], c[0], c[1])
+        }
         if (kind == Kind.RUN && mode == Mode.PLAYING) saveRun()
     }
 
@@ -417,10 +486,18 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
                 c.pedestals += ped
             }
             CellType.TREASURE -> pos.firstOrNull()?.let { c.pedestals += exvotoPed(it, false) }
-            CellType.SECRET -> pos.firstOrNull()?.let { c.pedestals += exvotoPed(it, false, Rarity.RARO) }
+            CellType.SECRET -> pos.firstOrNull()?.let {
+                c.pedestals += exvotoPed(it, false, Rarity.RARO)
+                // Una botella como máximo por run fuera de la Sala de lectura.
+                if (!bottleGiven && rng.nextFloat() < 0.5f) {
+                    val q = room.nearestFloor(it[0] + 24f, it[1])
+                    bottlePed(q, guaranteed = false)?.let { b -> c.pedestals += b }
+                }
+            }
             CellType.REFUGE -> pos.firstOrNull()?.let { c.pedestals += Pedestal(it[0], it[1], PedKind.REFUGIO) }
             CellType.ANTESALA -> pos.firstOrNull()?.let { c.pedestals += Pedestal(it[0], it[1], PedKind.VIGILIA) }
             CellType.CELDA -> pos.firstOrNull()?.let { c.pedestals += Pedestal(it[0], it[1], PedKind.JAULA) }
+            CellType.LECTURA -> pos.firstOrNull()?.let { p -> bottlePed(p, guaranteed = true)?.let { c.pedestals += it } }
             CellType.CAPILLA -> if (pos.size >= 2) {
                 // El mismo exvoto (raro o mejor) por dos precios: 10 de Luz máxima o la mitad de tu Luz.
                 val exclude = owned.map { it.id }.toSet() + offered
@@ -488,11 +565,22 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
                 it.taken = have
                 if (m.first == Meta.CAMPANERO) it.lockedText = "rescátalo en la Catedral Sumergida"
                 else if (!have && !shop) it.lockedText = CLOSED_SHOP
+                else if (!have && m.first == Meta.CARTOGRAFA && "cartografo" !in Meta.bosses) it.lockedText = "vence al Cartógrafo en el Archivo de los Náufragos"
             }
         }
     }
 
     private var amparoLine = 0
+
+    /** Una botella sin leer (o null si ya están todas leídas). */
+    private fun bottlePed(p: FloatArray, guaranteed: Boolean): Pedestal? {
+        val unread = Bottles.all.filter { it.id !in Meta.bottles && it.id !in offered }
+        if (unread.isEmpty()) return null
+        val b = unread[rng.nextInt(unread.size)]
+        offered += b.id
+        if (!guaranteed) bottleGiven = true
+        return Pedestal(p[0], p[1], PedKind.BOTELLA, metaId = b.id)
+    }
 
     private fun exvotoPed(p: FloatArray, priced: Boolean, min: Rarity = Rarity.COMUN): Pedestal {
         val exclude = owned.map { it.id }.toSet() + offered
@@ -506,16 +594,23 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         val budget = (Balance.budget(floorNum) * if (c.partner != null) 1.6f else 1f).roundToInt()
         val n = 1 + rng.nextInt(3)
         val pool = EnemyDefs.all.values.filter { it.biome == biome.tag }
-        // Los afijos nuevos se suman a los del Muelle (§14).
-        val affixes = if (biome == Biome.CATEDRAL) Affix.entries else Affix.entries.filter { it != Affix.BENDECIDO }
+        // Los afijos nuevos se suman a los del Muelle (§14): cada bioma añade el suyo.
+        val affixes = Affix.entries.filter {
+            when (it) {
+                Affix.BENDECIDO -> biome.ordinal >= Biome.CATEDRAL.ordinal
+                Affix.TACHADO -> biome.ordinal >= Biome.ARCHIVO.ordinal
+                Affix.HAMBRE -> biome == Biome.RAIZ
+                else -> true
+            }
+        }
         val cheapest = pool.minBy { it.cost }
         val out = ArrayDeque<List<Pair<String, Affix?>>>()
         for (i in 0 until n) {
             var wb = if (i == n - 1) budget - (budget / n) * (n - 1) else budget / n
             val wave = ArrayList<Pair<String, Affix?>>()
             // La celda tiene guardia: un élite como en las salas de élite.
-            if (i == 0 && (c.type == CellType.ELITE || c.type == CellType.CELDA)) {
-                val e = pool[rng.nextInt(pool.size)]
+            if (i == 0 && (c.type == CellType.ELITE || c.type == CellType.CELDA || heartAwake)) {
+                val e = pool.filter { it.id != "polilla" }.let { it[rng.nextInt(it.size)] }
                 wave += e.id to affixes[rng.nextInt(affixes.size)]
                 wb -= e.cost * 2
             }
@@ -524,8 +619,10 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
                 val options = pool.filter { it.cost <= wb }
                 if (options.isEmpty()) break
                 val pick = options[rng.nextInt(options.size)]
-                wave += pick.id to null
-                wb -= pick.cost
+                // Las polillas llegan en grupos de 4.
+                val n = if (pick.id == "polilla") min(4, max(1, wb / pick.cost)) else 1
+                repeat(n) { wave += pick.id to null }
+                wb -= pick.cost * n
             }
             if (wave.isEmpty()) wave += cheapest.id to null
             out.addLast(wave)
@@ -600,6 +697,12 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         if (s != null) { targetX = s.x; targetY = s.y } else { targetX = player.cx; targetY = player.cy }
 
         player.update(this, inp, dt)
+        recordHistory()
+        val light = playerLight()
+        for (e in enemies) {
+            e.inLight = dist(e.x, e.y, player.cx, player.cy) <= light + e.radius
+            e.boost = if (beatBoostT > 0f) 1.3f else 1f
+        }
 
         val it = pending.iterator()
         while (it.hasNext()) {
@@ -613,6 +716,7 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         }
 
         updateTerrain(dt)
+        updateArchivoRaiz(dt)
         updateVeilTracking()
         for (i in 0 until enemies.size) enemies[i].update(this, dt)
         if (newEnemies.isNotEmpty()) { enemies += newEnemies; newEnemies.clear() }
@@ -625,7 +729,7 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         updateTwin(dt)
         fx.update(dt)
 
-        if (cell.isCombat && !cell.cleared && enemies.isEmpty() && pending.isEmpty()) {
+        if ((cell.isCombat || heartAwake) && !cell.cleared && enemies.isEmpty() && pending.isEmpty()) {
             if (plan.isNotEmpty()) {
                 waveDelay -= dt
                 if (waveDelay <= 0f) {
@@ -676,6 +780,16 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
             val p = room.nearestFloor(room.width / 2f, room.height / 2f)
             cell.pedestals += Pedestal(p[0], p[1], PedKind.ESCALERA)
             showBanner("UNA ESCALERA BAJA AL ABISMO")
+        } else if (cell.type == CellType.LECTURA) {
+            if (!hasHazUsed) {
+                val p = room.nearestFloor(room.width / 2f, room.height / 2f - 24f)
+                cell.pedestals += exvotoPed(p, false, Rarity.RARO)
+                showBanner("RETO CUMPLIDO  ·  SIN HAZ  ·  UN EXVOTO RARO", 2.8f)
+            } else {
+                showBanner("SALA DESPEJADA  ·  USASTE EL HAZ: SIN PREMIO", 2.4f)
+            }
+        } else if (cell.type == CellType.CORAZON) {
+            showBanner("EL CORAZÓN VUELVE A DORMIR", 2.2f)
         } else if (cell.type == CellType.CELDA) {
             cell.pedestals.forEach { if (it.kind == PedKind.JAULA) it.selected = true }
             showBanner("LOS GUARDIAS HAN CAÍDO  ·  ABRE LA CELDA", 2.6f)
@@ -923,6 +1037,17 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
                 showBanner(p.metaTitle.uppercase(), 1.8f)
             }
             PedKind.DESCENSO -> next = Next.NEW_RUN
+            PedKind.BOTELLA -> {
+                val b = p.metaId?.let { Bottles.get(it) } ?: return
+                p.taken = true
+                Meta.bottles += b.id
+                Meta.save()
+                memory = Story.Memory("${b.from}  ·  botella ${Meta.bottles.size}/${Bottles.all.size}", b.text)
+                memoryT = MEMORY_TIME
+                fx.burst(p.x, p.y + 6f, 12, Pal.PAPER, 70f, 0.4f)
+                if (Meta.allBottles) showBanner("TODAS LAS BOTELLAS  ·  EL FINAL B ESTÁ ABIERTO", 3.5f)
+                saveRun()
+            }
             PedKind.JAULA -> {
                 if (!cell.cleared) { fx.floater("AÚN HAY GUARDIAS", p.x, p.y + 20f, Pal.CORAL); return }
                 p.taken = true
@@ -1043,6 +1168,206 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
 
     private var hasCoral = false
 
+    // ---------------------------------------------------------------- Archivo y Raíz
+
+    private fun updateArchivoRaiz(dt: Float) {
+        // Trampas (páginas, raíces) y líneas del Copista.
+        traps.removeAll { t ->
+            t.t -= dt
+            if (t.t <= 0f) {
+                if (player.hurtOverlaps(t.x, t.y, t.r)) hurtPlayer(t.dmg, t.x, t.y, t.src, t.cause)
+                fx.burst(t.x, t.y, 8, if (t.kind == Trap.Kind.PAGE) Pal.PAPER else Pal.ROOT_HI, 90f, 0.35f)
+                true
+            } else false
+        }
+        lines.removeAll { l ->
+            l.t -= dt
+            if (l.t <= 0f) {
+                val ax = l.x1 - l.x0
+                val ay = l.y1 - l.y0
+                val len2 = max(0.001f, ax * ax + ay * ay)
+                val k = (((player.cx - l.x0) * ax + (player.cy - l.y0) * ay) / len2).coerceIn(0f, 1f)
+                val px = l.x0 + ax * k
+                val py = l.y0 + ay * k
+                if (dist(px, py, player.cx, player.cy) < 9f) hurtPlayer(l.dmg, px, py, l.src, "Línea escrita · Copista")
+                var t = 0f
+                while (t <= 1f) { fx.burst(l.x0 + ax * t, l.y0 + ay * t, 2, Pal.INK_HI, 60f, 0.3f); t += 0.2f }
+                true
+            } else false
+        }
+        ink.removeAll { it[2] -= dt; it[2] <= 0f }
+
+        // Estanterías: cada 6 s se deslizan (aviso de 1 s). En la arena del Cartógrafo las mueve él.
+        if (room.shelves.isNotEmpty()) {
+            if (boss !is Cartografo) {
+                shelfT += dt
+                if (shelfT >= SHELF_PERIOD - 1f && room.shelves.all { it.warnT <= 0f && it.pending == 0 }) {
+                    for (g in room.shelves) g.warnT = 1f
+                    shelfT = -1f
+                }
+            }
+            for (g in room.shelves) {
+                if (g.warnT > 0f) {
+                    g.warnT -= dt
+                    if (g.warnT <= 0f) {
+                        g.sign = if (g.offset == 0) 1 else -1
+                        g.pending = g.steps
+                        g.stepT = 0f
+                        if (boss !is Cartografo) shelfT = 0f
+                    }
+                }
+                if (g.pending > 0) {
+                    g.stepT -= dt
+                    if (g.stepT <= 0f) {
+                        g.stepT = 0.18f
+                        g.pending--
+                        g.offset += g.sign
+                        room.shiftShelf(g, g.sign)
+                        shelfCrush(g.dx * g.sign, g.dy * g.sign)
+                    }
+                }
+            }
+        }
+
+        // Raíz: latido cada 10 s (aviso de 1 s) y vidrio fundido.
+        if (biome == Biome.RAIZ && !inSanctuary) {
+            beatBoostT = max(0f, beatBoostT - dt)
+            beatT -= dt
+            if (beatT <= 1f && beatT + dt > 1f) { addShake(1.5f); fx.floater("BUM", player.cx, player.cy + 26f, Pal.MOLTEN) }
+            if (beatT <= 0f) {
+                beatT = BEAT_PERIOD
+                beatBoostT = BEAT_BOOST_TIME
+                addShake(3f)
+            }
+        }
+        if (room.hasMolten && player.dashT <= 0f && !player.falling && room.isMoltenAt(player.x, player.y)) {
+            player.luz -= MOLTEN_BURN * dt
+            moltenTick += dt
+            if (moltenTick > 0.5f) { moltenTick = 0f; fx.floater("-2", player.cx, player.cy + 14f, Pal.MOLTEN) }
+            if (player.luz <= 0f) { lastCause = "Vidrio fundido"; die() }
+        }
+
+        // La Lámpara Madre bebe luz (fase 4).
+        val lamp = boss as? LamparaMadre
+        if (lamp != null && lamp.drinking && mode == Mode.PLAYING) {
+            player.luz -= dt
+            if (player.luz <= 0f) { lastCause = "La Lámpara Madre bebió tu luz"; die() }
+        }
+        if (lamp?.echoWarnT ?: 0f <= 0f) echoBanner = ""
+    }
+
+    /** Una estantería se movió un tile en (dx, dy): empuja o aplasta a quien estaba en medio. */
+    private fun shelfCrush(dx: Int, dy: Int) {
+        val p = player
+        if (room.boxHits(p.x, p.y, p.hw, p.hh)) {
+            val nx = p.x + dx * TILE
+            val ny = p.y + dy * TILE
+            if (!room.boxHits(nx, ny, p.hw, p.hh)) { p.x = nx; p.y = ny }
+            else {
+                val f = room.nearestFloor(p.x, p.y)
+                p.placeAt(f[0], f[1])
+                hurtPlayer(8f, p.cx - dx, p.cy - dy, null, "Aplastada por una estantería")
+            }
+        }
+        for (e in enemies) {
+            if (e.isBoss || e.killed || !room.boxHits(e.x, e.y, e.hw, e.hh)) continue
+            val nx = e.x + dx * TILE
+            val ny = e.y + dy * TILE
+            if (!room.boxHits(nx, ny, e.hw, e.hh)) { e.x = nx; e.y = ny }
+            else {
+                e.takeHit(this, 20f, e.x - dx, e.y - dy, HitKind.SLAM)
+                val f = room.nearestFloor(e.x, e.y)
+                e.x = f[0]; e.y = f[1]
+                fx.floater("¡CRAC!", e.x, e.y + 12f, Pal.PAPER)
+            }
+        }
+    }
+
+    private fun recordHistory() {
+        val s = history[(historyN % HISTORY).toInt()]
+        s.x = player.cx; s.y = player.cy
+        s.attack = player.swingStarted
+        s.ax = player.atkDx; s.ay = player.atkDy
+        historyN++
+    }
+
+    /** Estado de Isla hace [ticks] ticks (o null si aún no hay tanta historia). */
+    fun playerHistory(ticks: Int): Snap? {
+        if (historyN <= ticks || ticks >= HISTORY) return null
+        return history[((historyN - 1 - ticks) % HISTORY).toInt()]
+    }
+
+    fun spawnClone(owner: Cartografo): PaperClone {
+        val s = playerHistory(PaperClone.CLONE_DELAY)
+        val c = PaperClone(EnemyDefs["clon"], s?.x ?: owner.x, s?.y ?: owner.y, owner)
+        newEnemies += c
+        fx.burst(c.x, c.y, 14, Pal.PAPER, 90f, 0.5f)
+        fx.floater("TU COPIA", c.x, c.y + 20f, Pal.PAPER)
+        return c
+    }
+
+    /** Punto de suelo libre a [min]-[max] px de (x, y), o null. */
+    fun randomFloorNear(x: Float, y: Float, min: Float, max: Float): FloatArray? {
+        repeat(40) {
+            val a = rng.nextFloat() * MathUtils.PI2
+            val d = min + rng.nextFloat() * (max - min)
+            val px = x + cos(a) * d
+            val py = y + sin(a) * d
+            if (px < 20f || py < 20f || px > room.width - 20f || py > room.height - 20f) return@repeat
+            if (!room.boxHits(px, py, 8f, 8f, true)) return floatArrayOf(px, py)
+        }
+        return null
+    }
+
+    fun atrilLights(): List<FloatArray> = if (atrilesOn) atriles else emptyList()
+
+    fun inkTrail(x: Float, y: Float) { if (ink.size < 120) ink += floatArrayOf(x, y, 3f) }
+
+    /** El Cartógrafo redibuja la sala: [n] segmentos avisan 1 s y se deslizan. */
+    fun redrawWalls(n: Int) {
+        val free = room.shelves.filter { it.warnT <= 0f && it.pending == 0 }.shuffled(rng)
+        for (g in free.take(n)) g.warnT = 1f
+    }
+
+    /** Vidriero: deja vidrio fundido a sus pies 6 s. */
+    fun moltenTrail(x: Float, y: Float) {
+        val tx = (x / TILE).toInt()
+        val ty = (y / TILE).toInt()
+        val c = room.tileCenter(tx, ty)
+        if (dist(c[0], c[1], player.x, player.y) < 10f) return
+        room.putTemp(tx, ty, Room.MOLTEN, 6f)
+    }
+
+    /** Corazón de piedra golpeado: 30 de Luz en orbes y una oleada élite. */
+    fun awakenHeart(h: Enemy) {
+        heartAwake = true
+        cell.pedestals.clear()
+        repeat(30) { orbs += Orb(h.x, h.y, rng.nextFloat() * 180f - 90f, rng.nextFloat() * 180f - 90f, 1f) }
+        fx.burst(h.x, h.y, 30, Pal.ROOT_HI, 150f, 0.7f)
+        fx.blast(h.x, h.y, 40f)
+        addShake(5f)
+        room.doorsOpen = false
+        intact = true
+        plan = planWaves(cell)
+        waveDelay = 1.2f
+        showBanner("EL CORAZÓN DESPIERTA  ·  ALGO GRANDE VIENE", 2.6f)
+    }
+
+    /** Fase 2 de la Lámpara Madre: escupe un Vidriero cerca de ella. */
+    fun spitVidriero(x: Float, y: Float) {
+        randomFloorNear(x, y, 50f, 90f)?.let { pending += PendingSpawn("vidriero", it[0], it[1], SPAWN_TELEGRAPH, null) }
+    }
+
+    fun showEcho(label: String) {
+        echoBanner = label
+        showBanner(label, 1.6f)
+    }
+
+    /** La Campana revela 3 s a los que solo existen en tu luz. */
+    fun revealAt(x: Float, y: Float, r: Float) {
+        for (e in enemies) if (e.needsLight && dist(x, y, e.x, e.y) - e.radius <= r) e.revealT = 3f
+    }
+
     /** Enciende los candelabros apagados que toque un golpe en (x, y) con radio r. */
     fun igniteAt(x: Float, y: Float, r: Float) {
         for (c in candles) {
@@ -1160,6 +1485,21 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
     fun onBossPhase(n: Int) {
         projectiles.clear()
         addShake(5f)
+        if (boss is Cartografo) {
+            when (n) {
+                2 -> showBanner("EL CARTÓGRAFO TE DIBUJA  ·  ROMPE EL CLON", 2.4f)
+                3 -> { atrilesOn = false; showBanner("SE APAGAN TODAS LAS LUCES MENOS LA TUYA", 2.4f) }
+            }
+            return
+        }
+        if (boss is LamparaMadre) {
+            when (n) {
+                2 -> showBanner("LA LÁMPARA SE ABRE  ·  ALGO MIRA DESDE DENTRO", 2.4f)
+                3 -> showBanner("LA LÁMPARA RECUERDA A LOS QUE VENCISTE", 2.4f)
+                4 -> showBanner("LA LÁMPARA BEBE TU LUZ  ·  GOLPÉALA PARA RECUPERARLA", 2.6f)
+            }
+            return
+        }
         if (boss is Obispo) {
             when (n) {
                 2 -> showBanner("EL OBISPO SUBE AL ALTAR  ·  LOS VITRALES BRILLAN", 2.4f)
@@ -1204,6 +1544,11 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
             is Campanero -> Pal.LILAC
             is Vela -> Pal.LAMP
             is Cofrade -> Pal.CORAL_PINK
+            is Tinta -> Pal.INK_HI
+            is Bibliotecario, is Copista, is Polilla -> Pal.PAPER
+            is Anguila, is HijoDelFaro -> Pal.ROOT_HI
+            is Vidriero -> Pal.GLASSY
+            is OjoFosa -> Pal.MOLTEN
             else -> Pal.SHELL
         }
         fx.burst(e.x, e.y, 12, color, 90f, 0.45f)
@@ -1227,7 +1572,12 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         hitstop(10)
         val firstTime = id !in Meta.bosses
         Meta.bosses += id
-        val perlas = if (id == "obispo") OBISPO_PERLAS else BOSS_PERLAS
+        val perlas = when (id) {
+            "obispo" -> OBISPO_PERLAS
+            "cartografo" -> CARTOGRAFO_PERLAS
+            "lampara" -> LAMPARA_PERLAS
+            else -> BOSS_PERLAS
+        }
         perlasRun += perlas
         if (!test) Meta.addPerlas(perlas)
         if (firstTime) {
@@ -1238,14 +1588,17 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
             ?: floatArrayOf(room.width / 2f, room.height / 2f)
         cell.pedestals += exvotoPed(center, false, Rarity.EPICO)
         val end = room.nearestFloor(center[0], center[1] - 48f)
-        if (id == "sirena") {
-            showBanner(if (firstTime) "LA SIRENA SE HUNDE  ·  ARPÓN DESBLOQUEADO" else "LA SIRENA DE BREA SE HUNDE", 3.5f)
-            // La run sigue: bajo el muelle está la Catedral.
-            cell.pedestals += Pedestal(end[0], end[1], PedKind.ESCALERA)
-        } else {
-            showBanner(if (firstTime) "EL OBISPO CAE  ·  CAMPANA DESBLOQUEADA" else "EL OBISPO CORAL CAE", 3.5f)
-            cell.pedestals += Pedestal(end[0], end[1], PedKind.FIN)
-        }
+        showBanner(
+            when (id) {
+                "sirena" -> if (firstTime) "LA SIRENA SE HUNDE  ·  ARPÓN DESBLOQUEADO" else "LA SIRENA DE BREA SE HUNDE"
+                "obispo" -> if (firstTime) "EL OBISPO CAE  ·  CAMPANA DESBLOQUEADA" else "EL OBISPO CORAL CAE"
+                "cartografo" -> if (firstTime) "EL CARTÓGRAFO SE BORRA  ·  LA CARTÓGRAFA ABRE SU PUESTO" else "EL CARTÓGRAFO SE BORRA"
+                else -> "LA LÁMPARA MADRE SE APAGA"
+            }, 3.5f,
+        )
+        atrilesOn = true
+        // La run sigue hasta la Raíz; la Lámpara Madre cierra el descenso.
+        cell.pedestals += Pedestal(end[0], end[1], if (id == "lampara") PedKind.FIN else PedKind.ESCALERA)
         saveRun()
     }
 
@@ -1260,6 +1613,8 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         if (mode != Mode.PLAYING || p.invulnerable) return false
         var total = amount
         if (src?.affix == Affix.HAMBRIENTO) total += 3f
+        // Hambre de luz: +10 % de daño por cada 20 de tu Luz actual.
+        if (src?.affix == Affix.HAMBRE) total *= 1f + 0.1f * (p.luz / 20f).toInt()
         lastCause = if (src != null) {
             val elite = src.affix?.let { " (élite ${it.label})" } ?: ""
             "$attack · ${src.def.name}$elite"
@@ -1324,13 +1679,19 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
      */
     private fun updateVeilTracking() {
         val p = player
-        val hiding = p.veiling && p.veilT >= Balance.VEIL_LOSE_TIME
         val light = playerLight()
+        // Raíz: con un radio de 120 px o menos, solo te ven los que están dentro de tu luz.
+        val raiz = biome == Biome.RAIZ && !inSanctuary
+        if (raiz && !p.veiling && light > RAIZ_DETECT_RADIUS) {
+            for (e in enemies) if (e.lost) { e.lost = false; fx.floater("!", e.x, e.y + e.hh + 8f, Pal.CORAL) }
+            return
+        }
+        val hiding = (p.veiling && p.veilT >= Balance.VEIL_LOSE_TIME) || (raiz && light <= RAIZ_DETECT_RADIUS)
         for (e in enemies) {
             if (e.isBoss || !e.targetable) { e.lost = false; continue }
             val d = dist(e.x, e.y, p.cx, p.cy)
             if (!e.lost) {
-                if (hiding && d > Balance.VEIL_LOSE_DIST && e.state == EState.MOVE) {
+                if (hiding && d > max(Balance.VEIL_LOSE_DIST, if (p.veiling) 0f else light) && e.state == EState.MOVE) {
                     e.lost = true
                     e.lostX = targetX; e.lostY = targetY
                     fx.floater("?", e.x, e.y + e.hh + 8f, Pal.SHELL)
@@ -1386,6 +1747,7 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         if (brea) r *= 0.7f
         if (dimT > 0f) r *= 0.6f
         if ((boss as? Obispo)?.inColumn(player.cx) == true) r += 30f
+        if ((boss as? LamparaMadre)?.inColumn(player.cx) == true) r += 30f
         for (e in enemies) {
             if (e.affix == Affix.BRILLANTE && !e.killed) {
                 val d = dist(e.x, e.y, player.cx, player.cy)
@@ -1414,7 +1776,7 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
                         c.gx, c.gy, c.visited, c.known, c.cleared, c.stocked, c.refugeUsed, c.iconShown,
                         c.openSides.map { it.name },
                         c.pedestals.map { p ->
-                            RunSave.PedState(p.kind.name, p.x, p.y, p.exvoto?.id, p.price, p.taken, p.weapon?.name)
+                            RunSave.PedState(p.kind.name, p.x, p.y, p.exvoto?.id, p.price, p.taken, p.weapon?.name, p.metaId)
                         },
                     )
                 },
@@ -1422,13 +1784,14 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         )
     }
 
-    /** F3: carta + Luz llena · F4: ir al jefe · F5: exvoto (en el Santuario: +50 Perlas y todas las armas) · F6: 150 de daño · F8: Isla recibe 40 · F9: siguiente sala (grandes, antesala y capilla primero) · F10: exvotos de Velar · F11: saltar a la Catedral (o volver al Muelle). */
+    /** F3: carta + Luz llena · F4: ir al jefe · F5: exvoto (en el Santuario: +50 Perlas y todas las armas) · F6: 150 de daño · F8: Isla recibe 40 · F9: siguiente sala (grandes, antesala y capilla primero) · F10: exvotos de Velar · F11: saltar al bioma siguiente. */
     private fun debugCommand(cmd: Int) {
         when (cmd) {
             3 -> { if (!inSanctuary) { revealMap(); player.luz = player.luzMax } }
             11 -> if (!inSanctuary) {
-                // Saltar a la Catedral (piso 4) o volver al Muelle.
-                startFloor(if (biome == Biome.CATEDRAL) 1 else Biome.CATEDRAL.firstFloor)
+                // Saltar al primer piso del bioma siguiente (y del último, al Muelle).
+                val next = Biome.entries[(biome.ordinal + 1) % Biome.entries.size]
+                startFloor(next.firstFloor)
             }
             4 -> if (!inSanctuary) {
                 if (floorNum != biome.lastFloor) startFloor(biome.lastFloor)

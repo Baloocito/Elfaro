@@ -14,6 +14,8 @@ enum class PedKind {
     OFRENDA_MAX, OFRENDA_MITAD,
     // Rescate: la jaula de la celda y Amparo en el Santuario.
     JAULA, AMPARO,
+    /** Botella con mensaje (Sala de lectura, salas secretas). [metaId] = id de la botella. */
+    BOTELLA,
 }
 
 /**
@@ -53,6 +55,7 @@ class Pedestal(
             PedKind.OFRENDA_MITAD -> "Ofrecer la mitad de tu Luz por ${exvoto!!.name}"
             PedKind.JAULA -> "Abrir la celda"
             PedKind.AMPARO -> "Amparo, la guardesa"
+            PedKind.BOTELLA -> "Botella con mensaje"
         }
 
     val detail: String
@@ -79,6 +82,7 @@ class Pedestal(
             }
             PedKind.JAULA -> if (selected) "Los guardias cayeron. Ábrela." else "Alguien sigue vivo ahí dentro. Primero, acaba con los guardias."
             PedKind.AMPARO -> "Hablar."
+            PedKind.BOTELLA -> "Leerla. Cuenta para el final B."
         }
 }
 

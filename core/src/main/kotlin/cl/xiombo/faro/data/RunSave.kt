@@ -18,7 +18,7 @@ object RunSave {
 
     class PedState(
         val kind: String, val x: Float, val y: Float, val exvoto: String?, val price: Int,
-        val taken: Boolean, val weapon: String?,
+        val taken: Boolean, val weapon: String?, val meta: String? = null,
     )
 
     class CellState(
@@ -58,7 +58,7 @@ object RunSave {
                 if (j > 0) sb.append(',')
                 sb.append('{')
                 kv(sb, "k", p.kind); kv(sb, "x", p.x); kv(sb, "y", p.y); kv(sb, "e", p.exvoto ?: "")
-                kv(sb, "p", p.price); kv(sb, "w", p.weapon ?: ""); kv(sb, "t", p.taken, last = true)
+                kv(sb, "p", p.price); kv(sb, "w", p.weapon ?: ""); kv(sb, "m", p.meta ?: ""); kv(sb, "t", p.taken, last = true)
                 sb.append('}')
             }
             sb.append("]}")
@@ -91,6 +91,7 @@ object RunSave {
                         PedState(
                             p.getString("k"), p.getFloat("x"), p.getFloat("y"), p.getString("e", "").ifBlank { null },
                             p.getInt("p"), p.getBoolean("t"), p.getString("w", "").ifBlank { null },
+                            p.getString("m", "").ifBlank { null },
                         )
                     },
                 )
