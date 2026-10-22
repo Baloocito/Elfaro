@@ -127,6 +127,7 @@ class Controls(private val renderer: Renderer) : InputAdapter() {
             Input.Keys.F8 -> if (renderer.debug) state.debugCmd = 8
             Input.Keys.F9 -> if (renderer.debug) state.debugCmd = 9
             Input.Keys.F10 -> if (renderer.debug) state.debugCmd = 10
+            Input.Keys.F11 -> if (renderer.debug) state.debugCmd = 11
         }
         return true
     }

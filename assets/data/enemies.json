@@ -22,5 +22,35 @@
     "hp": 900, "dmg": 10, "speed": 40, "cost": 0,
     "body": [28, 20], "luzDrop": [0, 0],
     "attack": { "kind": "song", "range": 0, "telegraph": 0.6, "cooldown": 1.0 }
+  },
+  {
+    "id": "monaguillo", "name": "Monaguillo de sal", "biome": "catedral",
+    "hp": 36, "dmg": 9, "speed": 45, "cost": 3,
+    "body": [10, 12], "luzDrop": [1, 2],
+    "attack": { "kind": "fan", "range": 150, "telegraph": 0.5, "cooldown": 2.2 }
+  },
+  {
+    "id": "campanero", "name": "Campanero", "biome": "catedral",
+    "hp": 90, "dmg": 16, "speed": 28, "cost": 5,
+    "body": [14, 16], "luzDrop": [2, 3],
+    "attack": { "kind": "wave", "range": 96, "telegraph": 0.6, "cooldown": 4.0 }
+  },
+  {
+    "id": "vela", "name": "Vela errante", "biome": "catedral",
+    "hp": 20, "dmg": 5, "speed": 110, "cost": 1,
+    "body": [8, 10], "luzDrop": [0, 1],
+    "attack": { "kind": "kamikaze", "range": 64, "telegraph": 0.3, "cooldown": 0.8 }
+  },
+  {
+    "id": "cofrade", "name": "Cofrade de coral", "biome": "catedral",
+    "hp": 110, "dmg": 16, "speed": 30, "cost": 5,
+    "body": [16, 16], "luzDrop": [2, 3],
+    "attack": { "kind": "line", "range": 64, "telegraph": 0.6, "cooldown": 2.0 }
+  },
+  {
+    "id": "obispo", "name": "El Obispo Coral", "biome": "jefe",
+    "hp": 1500, "dmg": 14, "speed": 34, "cost": 0,
+    "body": [22, 26], "luzDrop": [0, 0],
+    "attack": { "kind": "sweep", "range": 48, "telegraph": 0.5, "cooldown": 1.4 }
   }
 ]

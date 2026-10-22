@@ -10,6 +10,8 @@ enum class PedKind {
     EXVOTO, MECHA, MEJORA, MAPA, REFUGIO, ESCALERA, FIN, VIGILIA,
     // Santuario
     ARMA, INICIAL, META, DESCENSO,
+    // Capilla de la ofrenda (Catedral): el mismo exvoto por dos precios distintos.
+    OFRENDA_MAX, OFRENDA_MITAD,
 }
 
 /**
@@ -45,6 +47,8 @@ class Pedestal(
             PedKind.INICIAL -> exvoto!!.name
             PedKind.META -> metaTitle
             PedKind.DESCENSO -> "Bajar al faro"
+            PedKind.OFRENDA_MAX -> "Ofrecer 10 de Luz máxima por ${exvoto!!.name}"
+            PedKind.OFRENDA_MITAD -> "Ofrecer la mitad de tu Luz por ${exvoto!!.name}"
         }
 
     val detail: String
@@ -65,6 +69,10 @@ class Pedestal(
             PedKind.INICIAL -> "Empieza la run con este exvoto. ${exvoto!!.desc}" + if (selected) " Elegido." else ""
             PedKind.META -> lockedText?.let { "$metaDetail Bloqueado: $it." } ?: metaDetail
             PedKind.DESCENSO -> "Empieza una run nueva."
+            PedKind.OFRENDA_MAX, PedKind.OFRENDA_MITAD -> {
+                val e = exvoto!!
+                "${e.rarity.label}. ${e.desc} Rechazar no cuesta nada."
+            }
         }
 }
 
