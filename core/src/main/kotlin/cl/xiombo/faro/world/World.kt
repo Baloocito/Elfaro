@@ -530,6 +530,9 @@ class World private constructor(val seed: Long, val kind: Kind) {
             .filter { (!it.taken || it.kind == PedKind.META) && dist(it.x, it.y, player.cx, player.y) < 20f }
             .minByOrNull { dist(it.x, it.y, player.cx, player.y) }
         val target = interactable
+        // Recién llegado (al Santuario o a una run nueva) se ignora el USAR que venía de la pantalla
+        // anterior: si no, salir de la muerte con E te tiraba directo al pozo.
+        if (time < 0.6f) inp.useBuf = 0f
         if (inp.useBuf > 0f && target != null) {
             inp.useBuf = 0f
             interact(target)

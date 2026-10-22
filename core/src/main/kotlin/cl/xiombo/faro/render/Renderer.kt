@@ -1220,7 +1220,7 @@ class Renderer : Disposable {
         for (f in w.fx.floaters) {
             text(f.text, f.x - camLeft, f.y - camBottom, f.color, alpha = (f.t / 0.9f).coerceIn(0f, 1f), align = 0)
         }
-        if (w.bannerT > 0f) {
+        if (w.bannerT > 0f && !(w.mode == World.Mode.DEAD && w.modeT > World.SLOWMO_TIME)) {
             text(w.banner, iw / 2f, ih * 0.80f, Pal.LAMP, alpha = w.bannerT.coerceIn(0f, 1f), align = 0)
         }
         w.boss?.let { b ->
@@ -1248,7 +1248,7 @@ class Renderer : Disposable {
                     text("TE APAGÓ", iw / 2f, 190f, Pal.CORAL, align = 0)
                     text(d.cause, iw / 2f, 174f, Pal.LAMP_HI, align = 0)
                     text("Piso ${d.floor}  ·  sala ${d.roomType}  ·  entraste con ${d.entryLuz} de Luz", iw / 2f, 152f, Pal.CREAM, align = 0)
-                    text("Quedaban ${d.enemiesLeft} enemigos  ·  ${mm}:${ss.toString().padStart(2, '0')}  ·  ${w.kills} bajas  ·  ${w.owned.size} exvotos", iw / 2f, 136f, Pal.CREAM, align = 0)
+                    text((if (d.enemiesLeft == 1) "Quedaba 1 enemigo" else "Quedaban ${d.enemiesLeft} enemigos") + "  ·  ${mm}:${ss.toString().padStart(2, '0')}  ·  ${w.kills} bajas  ·  ${w.owned.size} exvotos", iw / 2f, 136f, Pal.CREAM, align = 0)
                     text("Perlas de esta run: ${w.perlasRun}   (total ${Meta.perlas})", iw / 2f, 114f, Pal.SHELL, align = 0)
                 }
                 if (w.modeT > 1.8f) text(anyKeyText(c, "volver al Santuario"), iw / 2f, 88f, Pal.LAMP_HI, align = 0)
