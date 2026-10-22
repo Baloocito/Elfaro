@@ -354,7 +354,7 @@ class LamparaMadre(def: EnemyDef, x: Float, y: Float) : Enemy(def, x, y, 1, null
         for (a in beamAngles()) {
             val ax = cos(a)
             val ay = sin(a)
-            val len = w.room.rayLength(x, y, ax, ay, 600f)
+            val len = BEAM_START + w.room.rayLength(x + ax * BEAM_START, y + ay * BEAM_START, ax, ay, 600f)
             val ex = p.cx - x
             val ey = p.cy - y
             val t = (ex * ax + ey * ay)
@@ -429,5 +429,9 @@ class LamparaMadre(def: EnemyDef, x: Float, y: Float) : Enemy(def, x, y, 1, null
         }
     }
 
-    companion object { private val MARKS = floatArrayOf(0.75f, 0.5f, 0.2f) }
+    companion object {
+        private val MARKS = floatArrayOf(0.75f, 0.5f, 0.2f)
+        /** Los haces salen del borde de la base (que es sólida). */
+        const val BEAM_START = 22f
+    }
 }

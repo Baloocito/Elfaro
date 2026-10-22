@@ -213,6 +213,9 @@ class Room(val template: RoomTemplate, val doors: Set<DoorSpec>, val crack: Door
         return true
     }
 
+    /** Vuelve sólido un tile (la base de la Lámpara Madre). */
+    fun block(tx: Int, ty: Int) = set(tx, ty, WALL)
+
     fun isRail(tx: Int, ty: Int) = tx in 0 until cols && ty in 0 until rows && rail[ty * cols + tx]
     fun isMoltenAt(x: Float, y: Float) = tileAt(floor(x / TILE).toInt(), floor(y / TILE).toInt()) == MOLTEN
 

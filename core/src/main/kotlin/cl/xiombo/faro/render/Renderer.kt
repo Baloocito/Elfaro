@@ -822,7 +822,7 @@ class Renderer : Disposable {
         for (a in lamp.beamAngles()) {
             val ax = cos(a)
             val ay = sin(a)
-            val len = w.room.rayLength(lamp.x, lamp.y, ax, ay, 600f)
+            val len = LamparaMadre.BEAM_START + w.room.rayLength(lamp.x + ax * LamparaMadre.BEAM_START, lamp.y + ay * LamparaMadre.BEAM_START, ax, ay, 600f)
             if (lamp.beamWarnT > 0f) {
                 col(Pal.LAMP_HI, if (blink) 0.45f else 0.2f)
                 shapes.rectLine(lamp.x, lamp.y, lamp.x + ax * len, lamp.y + ay * len, 1f)

@@ -255,15 +255,17 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         forceRescueFloor = if (toCell) floor else -1
         initRun()
         if (floor != 1) startFloor(floor)
-        when {
-            toBoss -> map.all.firstOrNull { it.type == CellType.BOSS }?.let { enterCell(it, null) }
-            toCell -> map.all.firstOrNull { it.type == CellType.CELDA }?.let {
-                enterCell(it, null)
-                // Entrar por una puerta, no dentro de la jaula.
-                room.doors.minByOrNull { d -> d.side.ordinal }?.let { d ->
-                    val e = room.entryPoint(d)
-                    player.placeAt(e[0], e[1])
-                }
+        val target = when {
+            toBoss -> map.all.firstOrNull { it.type == CellType.BOSS }
+            toCell -> map.all.firstOrNull { it.type == CellType.CELDA }
+            else -> null
+        }
+        target?.let {
+            enterCell(it, null)
+            // Entrar por una puerta, no dentro de la jaula ni encima del jefe.
+            room.doors.minByOrNull { d -> d.side.ordinal }?.let { d ->
+                val e = room.entryPoint(d)
+                player.placeAt(e[0], e[1])
             }
         }
     }
@@ -370,6 +372,7 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
             chapter = Story.chapter(b)
             chapterT = CHAPTER_TIME
         } else {
+            chapterT = 0f
             showBanner("${b.label}  ·  PISO $n", 2.6f)
         }
     }
@@ -435,6 +438,12 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
             // La Lámpara Madre está fija en el centro de la arena.
             val by = if (id == "lampara") room.height / 2f + 8f else room.height - 64f
             val b = createEnemy(id, room.width / 2f, by, 1)
+            if (id == "lampara") {
+                // La base de la lámpara es sólida: Isla la golpea desde fuera.
+                val tx = (b.x / TILE).toInt()
+                val ty = (b.y / TILE).toInt()
+                for (dx in -1..0) for (dy in -1..0) room.block(tx + dx, ty + dy)
+            }
             enemies += b
             boss = b
             showBanner(b.def.name.uppercase(), 2.6f)
