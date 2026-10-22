@@ -107,7 +107,7 @@ object RunSave {
     private fun list(v: JsonValue?): List<JsonValue> {
         val out = ArrayList<JsonValue>()
         var c = v?.child
-        while (c != null) { out += c; c = c.next }
+        while (c != null) { out.add(c); c = c.next }
         return out
     }
 
