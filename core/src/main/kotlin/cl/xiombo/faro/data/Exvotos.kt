@@ -21,19 +21,23 @@ enum class Rarity(val label: String, val price: Int, val color: Color) {
 class ExvotoDef(val id: String, val name: String, val tag: Tag, val rarity: Rarity, val desc: String)
 
 /**
- * Exvotos de la F1 (§8): los 12 del documento + 3 nuevos (Ceniza de faro, Costra de sal,
- * Vértebra suelta) para llegar a 15. Tres de la misma etiqueta activan su conjunto.
+ * Exvotos (§8): los 12 del documento + Ceniza de faro, Costra de sal y Vértebra suelta, más los
+ * tres que convierten Velar en ataque (Pabilo corto, Sal en los ojos, Marea quieta).
+ * Tres de la misma etiqueta activan su conjunto.
  */
 object Exvotos {
     val all = listOf(
         ExvotoDef("mecha_trenzada", "Mecha trenzada", Tag.FUEGO, Rarity.COMUN, "La Quemadura dura +1 s."),
         ExvotoDef("ceniza_faro", "Ceniza de faro", Tag.FUEGO, Rarity.COMUN, "El Haz cuesta 6 de Luz en vez de 8."),
         ExvotoDef("corazon_vela", "Corazón de vela", Tag.FUEGO, Rarity.RARO, "Los enemigos quemados sueltan +1 Luz."),
+        ExvotoDef("pabilo_corto", "Pabilo corto", Tag.FUEGO, Rarity.COMUN, "Al soltar Velar tras 0,5 s, un Fogonazo hace 10 de daño a 80 px (cada 6 s)."),
         ExvotoDef("lengua_telmo", "Lengua de San Telmo", Tag.FUEGO, Rarity.EPICO, "El Haz deja un rastro de fuego durante 3 s."),
         ExvotoDef("grano_sal", "Grano de sal", Tag.SAL, Rarity.COMUN, "+8 % de daño contra enemigos ralentizados."),
         ExvotoDef("costra_sal", "Costra de sal", Tag.SAL, Rarity.COMUN, "El 3.er golpe del Farol ralentiza un 30 % durante 1,5 s."),
+        ExvotoDef("sal_ojos", "Sal en los ojos", Tag.SAL, Rarity.RARO, "Al soltar Velar tras 0,5 s, un Fogonazo aturde 1,2 s a 80 px (cada 6 s)."),
         ExvotoDef("estatua_sal", "Estatua de sal", Tag.SAL, Rarity.RARO, "El Destello deja una estatua que atrae enemigos 1,5 s."),
         ExvotoDef("rosa_vientos", "Rosa de los vientos", Tag.MAREA, Rarity.COMUN, "+10 % de velocidad mientras no atacas."),
+        ExvotoDef("marea_quieta", "Marea quieta", Tag.MAREA, Rarity.COMUN, "Velando te mueves a velocidad normal y el Fogonazo llega a 104 px."),
         ExvotoDef("caracola", "Caracola", Tag.MAREA, Rarity.RARO, "Segunda carga de Destello."),
         ExvotoDef("ancla_plata", "Ancla de plata", Tag.MAREA, Rarity.EPICO, "Los empujes contra una pared hacen 25 de daño."),
         ExvotoDef("diente_naufrago", "Diente de náufrago", Tag.HUESO, Rarity.COMUN, "+4 de daño en el primer golpe a cada enemigo."),

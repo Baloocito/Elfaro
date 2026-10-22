@@ -124,6 +124,13 @@ class Stats(owned: List<ExvotoDef>, val weaponLevel: Int, val weapon: Weapon = W
     val eye = has("ojo_farero")
     val twinLamp = has("lampara_gemela")
 
+    // Velar y su Fogonazo
+    val flashDmg = if (has("pabilo_corto")) 10f else 0f
+    val flashStun = if (has("sal_ojos")) 1.2f else 0f
+    val flashOn = flashDmg > 0f || flashStun > 0f
+    val flashRadius = if (has("marea_quieta")) 104f else 80f
+    val veilSpeed = if (has("marea_quieta")) 1f else Balance.VEIL_MOVE_FACTOR
+
     /** La mejora del Farol es daño; las demás armas mejoran su rasgo propio (ver [Weapon.upgradeText]). */
     val weaponMul = if (weapon == Weapon.FAROL) 1f + 0.2f * weaponLevel else 1f
 }

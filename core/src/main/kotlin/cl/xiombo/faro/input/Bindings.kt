@@ -9,6 +9,7 @@ enum class Action(val label: String) {
     DASH("Destello"),
     HAZ("Haz"),
     USE("Usar"),
+    VELAR("Velar"),
 }
 
 /**
@@ -62,17 +63,26 @@ class Layout(val slots: Array<Array<String?>>) {
         return Result("Botón quitado de ${Action.entries[a].label}", false)
     }
 
+    /** Da a cada acción vacía los botones de [def] que estén libres. */
+    fun fillEmpty(def: Layout) {
+        for (a in slots.indices) {
+            if (count(a) > 0) continue
+            val free = def.codes(a).filter { find(it) == null }
+            free.take(Bindings.MAX_PER_ACTION).forEachIndexed { i, c -> slots[a][i] = c }
+        }
+    }
+
     /** El primer hueco nunca queda vacío si el segundo tiene algo. */
     private fun normalize() {
         for (row in slots) if (row[0] == null && row[1] != null) { row[0] = row[1]; row[1] = null }
     }
 
     /** Válida si cada acción tiene 1–2 botones y ningún botón se repite. */
-    fun isValid(): Boolean {
+    fun isValid(allowEmpty: Boolean = false): Boolean {
         val seen = HashSet<String>()
         for (a in slots.indices) {
             val c = codes(a)
-            if (c.isEmpty() || c.size > Bindings.MAX_PER_ACTION) return false
+            if ((c.isEmpty() && !allowEmpty) || c.size > Bindings.MAX_PER_ACTION) return false
             for (code in c) if (!seen.add(code)) return false
         }
         return true
@@ -98,7 +108,9 @@ object Bindings {
             }
             val l = Layout(slots)
             // Datos dañados o editados a mano: se descartan y se usan los de por defecto.
-            if (any && l.isValid()) custom = l
+            // Una acción nueva sin botón guardado (Velar, en configuraciones anteriores) no invalida
+            // el resto: se rellena con su botón por defecto al leer la distribución.
+            if (any && l.isValid(allowEmpty = true)) custom = l
         }
     }
 
@@ -131,8 +143,7 @@ object Bindings {
     val isCustom get() = custom != null
 
     /**
-     * Por defecto (disposición Xbox, §3): Farol RT + X · Destello A + RB · Haz LT + B · Usar Y.
-     * LB queda libre para quien quiera usarlo.
+     * Por defecto (disposición Xbox, §3): Farol RT + X · Destello A + RB · Haz LT + B · Usar Y · Velar LB.
      */
     fun defaults(m: ControllerMapping): Layout {
         val wanted = listOf(
@@ -140,6 +151,7 @@ object Bindings {
             listOf(m.buttonA, m.buttonR1),
             listOf(m.buttonL2, m.buttonB),
             listOf(m.buttonY),
+            listOf(m.buttonL1),
         )
         val used = HashSet<Int>()
         val slots = Array(Action.entries.size) { a ->
@@ -149,7 +161,12 @@ object Bindings {
         return Layout(slots)
     }
 
-    fun layout(c: Controller): Layout = custom ?: defaults(c.mapping)
+    fun layout(c: Controller): Layout {
+        val l = custom ?: return defaults(c.mapping)
+        if (l.isValid()) return l
+        val f = l.copy().also { it.fillEmpty(defaults(c.mapping)) }
+        return if (f.isValid()) f else defaults(c.mapping)
+    }
 
     fun codes(c: Controller, a: Action): List<String> = layout(c).codes(a.ordinal)
 

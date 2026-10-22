@@ -60,6 +60,18 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
     var swingIsThird = false
     private val swingHits = HashSet<Enemy>()
 
+    // Velar: mantener baja la luz. Con exvotos, al soltar sale un Fogonazo.
+    var veiling = false
+        private set
+    var veilT = 0f
+        private set
+    /** 0 = luz normal, 1 = velado del todo (se suaviza para que la luz no salte). */
+    var veilK = 0f
+        private set
+    var flashCd = 0f
+        private set
+    val flashCharged get() = veiling && veilT >= Balance.VEIL_CHARGE && flashCd <= 0f
+
     // Haz
     var hazT = 0f
     var hazLen = 0f
@@ -99,6 +111,7 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
         vx = 0f; vy = 0f; kbX = 0f; kbY = 0f
         dashT = 0f; hazT = 0f; atkFrame = -1; fallT = 0f; coyote = 0f
         harpoon = null
+        veiling = false; veilT = 0f
         snapshot()
     }
 
@@ -126,6 +139,8 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
             }
             return
         }
+
+        updateVeil(w, inp, dt)
 
         val moving = inp.mx != 0f || inp.my != 0f
         if (moving) {
@@ -162,6 +177,7 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
 
         // Haz: cuesta Luz; no se puede usar si deja la Luz en 0. También cancela la recuperación del Farol.
         val inRecovery = atkFrame >= weapon.startup + weapon.active
+        if (veiling) inp.hazBuf = 0f
         if (inp.hazBuf > 0f && hazT <= 0f && (!attacking || inRecovery)) {
             inp.hazBuf = 0f
             atkFrame = -1
@@ -184,6 +200,7 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
         if (!attacking && hazT <= 0f) {
             comboTimer -= dt
             if (comboTimer <= 0f) comboIdx = 0
+            if (veiling) inp.attackBuf = 0f
             if (inp.attackBuf > 0f && canAttack()) {
                 inp.attackBuf = 0f
                 startSwing()
@@ -195,6 +212,7 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
         var max = Balance.SPEED
         if (attacking) max *= weapon.moveFactor else if (hazT <= 0f) max *= st.windSpeed
         if (hazT > 0f) max *= Balance.HAZ_MOVE_FACTOR
+        if (veiling) max *= st.veilSpeed
         if (w.playerInPuddle()) max *= 0.6f
         val rate = (if (moving) Balance.ACCEL else Balance.DECEL) * dt
         vx = approach(vx, inp.mx * max, rate)
@@ -202,6 +220,27 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
         w.room.move(this, (vx + kbX) * dt, (vy + kbY) * dt)
 
         updatePits(w, dt)
+    }
+
+    /**
+     * Velar (mantener): la luz baja a 56 px, te mueves al 70 % y no puedes atacar. Los enemigos
+     * lejanos te pierden (ver World.updateVeilTracking). Al soltar tras 0,5 s, si tienes un exvoto
+     * de Fogonazo y no está en recarga, sale el Fogonazo.
+     */
+    private fun updateVeil(w: World, inp: InputState, dt: Float) {
+        flashCd -= dt
+        val want = inp.veil && !attacking && hazT <= 0f && dashT <= 0f
+        if (want) {
+            veilT += dt
+        } else if (veiling) {
+            if (veilT >= Balance.VEIL_CHARGE && flashCd <= 0f && w.stats.flashOn) {
+                flashCd = Balance.FLASH_COOLDOWN
+                w.veilFlash()
+            }
+            veilT = 0f
+        }
+        veiling = want
+        veilK = approach(veilK, if (veiling) 1f else 0f, dt * 5f)
     }
 
     private fun updatePits(w: World, dt: Float) {

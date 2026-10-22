@@ -32,6 +32,10 @@ Todo lo de la F1, más los requisitos previos a los biomas 2-4 (§13 del documen
   +20 si te queda menos del 80 % y +10 en otro caso.
 - **Salas grandes** que ocupan dos celdas (horizontales o verticales).
 - **Muerte legible**: se ve qué te mató, en qué sala y con cuánta Luz habías entrado.
+- **Velar**: mantén LB (C en PC) para tapar el farol. La luz baja a 56 px, te mueves al 70 %
+  y no atacas; tras 0,4 s los enemigos a más de 64 px te pierden el rastro y te buscan. Tres
+  exvotos lo convierten en ataque: Pabilo corto (Fogonazo de 10 de daño al soltar), Sal en los
+  ojos (el Fogonazo aturde 1,2 s) y Marea quieta (velas a velocidad normal y el Fogonazo llega más lejos).
 - **Guardado de la run** al entrar en cada sala y al pausar. Se puede abandonar la run desde la pausa.
 
 ## F1 · Núcleo roguelike
@@ -65,9 +69,10 @@ F0 (prototipo de sensación) está completa: movimiento, Destello, Farol, Haz, l
 | Destello | Espacio / Shift        | Botón DESTELLO                 | A / RB                      |
 | Haz      | Clic der. / K / Q      | Botón HAZ                      | LT / B                      |
 | Usar / comprar | E / Enter        | Botón USAR (aparece cerca)     | Y                           |
+| Velar (mantener) | C / Ctrl izq.  | Botón VELAR                    | LB                          |
 | Pausa    | Esc / P                | Botón II o atrás               | Start / Select              |
 | Debug    | F1 cajas y FPS · F2 luz on/off | —                      | —                           |
-| Con F1   | F3 carta y Luz llena · F4 ir al jefe · F5 exvoto (en el Santuario: +50 Perlas y todas las armas) · F6 150 de daño · F8 Isla recibe 40 · F9 salta a sala grande o antesala · F7 mando virtual (teclas 1–0) | — | — |
+| Con F1   | F3 carta y Luz llena · F4 ir al jefe · F5 exvoto (en el Santuario: +50 Perlas y todas las armas) · F6 150 de daño · F8 Isla recibe 40 · F9 salta a sala grande o antesala · F10 exvotos de Velar · F7 mando virtual (teclas 1–0) | — | — |
 
 **Mando:** se conecta por Bluetooth en los ajustes del teléfono y el juego lo detecta solo.
 Al usarlo se ocultan los controles táctiles, y vuelven a aparecer al tocar la pantalla.

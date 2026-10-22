@@ -18,6 +18,8 @@ class InputState {
     var dashBuf = 0f
     var hazBuf = 0f
     var useBuf = 0f
+    /** Velar: se mantiene pulsado. */
+    var veil = false
     var anyPressed = false
     /** Comandos de depuración (F3–F6, solo con F1 activo). */
     var debugCmd = 0

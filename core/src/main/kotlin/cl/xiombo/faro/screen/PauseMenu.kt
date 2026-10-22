@@ -29,8 +29,8 @@ class PauseMenu {
 
         // Pantalla de configuración
         const val ROW_Y0 = 184f
-        const val ROW_STEP = 26f
-        const val CELL_H = 20f
+        const val ROW_STEP = 23f
+        const val CELL_H = 18f
         const val LABEL_X = 258f
         const val LABEL_W = 70f
         val SLOT_X = floatArrayOf(332f, 402f)
