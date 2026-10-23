@@ -38,7 +38,7 @@ import kotlin.random.Random
  */
 class World private constructor(val seed: Long, val kind: Kind, val test: Boolean = false) {
     enum class Kind { SANCTUARY, RUN }
-    enum class Mode { PLAYING, DEAD, VICTORY }
+    enum class Mode { PLAYING, DEAD, VICTORY, DEMO_END }
     /** Lo que RunScreen debe crear a continuación. */
     enum class Next { NONE, NEW_RUN, SANCTUARY }
 
@@ -61,6 +61,7 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         const val CARTOGRAFO_PERLAS = 20
         const val LAMPARA_PERLAS = 35
         const val FARERO_PERLAS = 50
+        const val DEMO_TEASE = 3f
         const val CRIATURA_PERLAS = 20
         const val ATRIL_LIGHT = 48f
         const val MOLTEN_BURN = 4f         // Luz por segundo sobre vidrio fundido
@@ -167,6 +168,9 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
     fun sfx(name: String) { if (sounds.size < 16) sounds += name }
     /** Final C: se abrió el camino del Farero Antiguo en esta run. */
     var finalC = false
+        private set
+    /** Demo: segundos que se ve a la Sirena antes de fundir a negro. */
+    var demoEndT = 0f
         private set
     /** Pelea a oscuras (Farero o criatura de Marea 10): tu radio no pasa de 80 px. */
     var darkFight = false
@@ -504,6 +508,8 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
             }
             enemies += b
             boss = b
+            // Demo: se ve a la Sirena un momento y la pantalla funde a negro.
+            if (cl.xiombo.faro.data.Edition.demo) demoEndT = DEMO_TEASE
             if (b is LamparaMadre && b.dormant) {
                 showBanner(if (Meta.HIJA in Meta.unlocks) "LA LÁMPARA DUERME  ·  VELA CERCA DE ELLA 3 SEGUNDOS" else "LA LÁMPARA DUERME", 3f)
             } else showBanner(b.def.name.uppercase(), 2.6f)
@@ -785,12 +791,16 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
             } else {
                 fx.update(dt)
             }
-            if (modeT > 1.8f && inp.anyPressed) next = Next.SANCTUARY
+            if (modeT > (if (mode == Mode.DEMO_END) 3.5f else 1.8f) && inp.anyPressed) next = Next.SANCTUARY
             inp.consume(dt)
             return
         }
 
-        if (inp.debugCmd != 0) debugCommand(inp.debugCmd)
+        if (inp.debugCmd != 0 && !cl.xiombo.faro.data.Edition.demo) debugCommand(inp.debugCmd)
+        if (demoEndT > 0f) {
+            demoEndT -= dt
+            if (demoEndT <= 0f) endDemo()
+        }
         val s = statue
         if (s != null) { targetX = s.x; targetY = s.y } else { targetX = player.cx; targetY = player.cy }
 
@@ -1840,6 +1850,19 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         saveRun()
     }
 
+    /** Fin de la demo: la run termina en la puerta de la Sirena. */
+    private fun endDemo() {
+        mode = Mode.DEMO_END
+        modeT = 0f
+        projectiles.clear()
+        sfx("victory")
+        if (!test) {
+            RunSave.clear()
+            Meta.save()
+            logRun("DEMO")
+        }
+    }
+
     fun gainLuz(v: Float) { player.luz = min(player.luzMax, player.luz + v) }
 
     /**
@@ -1848,7 +1871,7 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
      */
     fun hurtPlayer(amount: Float, sx: Float, sy: Float, src: Enemy?, attack: String): Boolean {
         val p = player
-        if (mode != Mode.PLAYING || p.invulnerable) return false
+        if (mode != Mode.PLAYING || p.invulnerable || demoEndT > 0f) return false
         var total = amount
         if (src?.has(Affix.HAMBRIENTO) == true) total += 3f
         if (stats.salmuera && src?.slowed == true) total *= 0.85f

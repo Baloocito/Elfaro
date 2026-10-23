@@ -126,7 +126,7 @@ class Controls(private val renderer: Renderer) : InputAdapter() {
             Input.Keys.E, Input.Keys.ENTER -> press(3)
             Input.Keys.ESCAPE, Input.Keys.P, Input.Keys.BACK -> menuInput.pause = true
             Input.Keys.TAB, Input.Keys.I -> menuInput.status = true
-            Input.Keys.F1 -> renderer.debug = !renderer.debug
+            Input.Keys.F1 -> if (!cl.xiombo.faro.data.Edition.demo) renderer.debug = !renderer.debug
             Input.Keys.F2 -> renderer.lighting = !renderer.lighting
             Input.Keys.F7 -> if (renderer.debug) toggleVirtualPad = true
             Input.Keys.F3, Input.Keys.F4, Input.Keys.F5, Input.Keys.F6 ->

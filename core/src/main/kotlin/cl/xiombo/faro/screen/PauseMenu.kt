@@ -127,7 +127,7 @@ class PauseMenu {
     val labels: List<String> get() = items.map { it.label }
     val title: String
         get() = when (page) {
-            Page.TITLE -> "FARO HUNDIDO"
+            Page.TITLE -> if (cl.xiombo.faro.data.Edition.demo) "FARO HUNDIDO  ·  DEMO" else "FARO HUNDIDO"
             Page.TESTS -> "NIVELES DE PRUEBA"
             Page.PAUSE -> if (seedCode.isNotEmpty()) "PAUSA  ·  SEMILLA $seedCode" else "PAUSA"
             Page.SEED -> "JUGAR SEMILLA"
@@ -189,7 +189,7 @@ class PauseMenu {
                 if (hasSave) add(Item("Continuar descenso") { finish(Request.Continue) })
                 add(Item("Jugar  ·  ir al Santuario") { finish(Request.Play) })
                 add(Item("Jugar una semilla") { setPage(Page.SEED) })
-                add(Item("Niveles de prueba") { setPage(Page.TESTS) })
+                if (!cl.xiombo.faro.data.Edition.demo) add(Item("Niveles de prueba") { setPage(Page.TESTS) })
                 add(Item("Opciones") { setPage(Page.OPTIONS) })
                 add(Item("Registro de runs") { setPage(Page.LOG) })
                 add(Item(CONFIG_LABEL) { openConfig() })

@@ -113,6 +113,7 @@ class RunScreen : KtxScreen {
 
     private fun trackFor(w: World): String = when {
         w.inSanctuary -> "santuario"
+        w.mode == World.Mode.DEMO_END -> "santuario"
         w.mode == World.Mode.VICTORY || w.mode == World.Mode.DEAD -> ""
         w.darkFight -> "oscuridad"
         w.boss?.let { !it.killed && it.introduced } == true -> "jefe"

@@ -1,6 +1,9 @@
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 
+// Demo para la campaña: ./gradlew -Pdemo android:assembleDebug (el CI además crea assets/demo.flag).
+def demo = project.hasProperty('demo')
+
 android {
   namespace 'cl.xiombo.faro'
   compileSdk 35
@@ -16,7 +19,9 @@ android {
   }
 
   defaultConfig {
-    applicationId 'cl.xiombo.faro'
+    // La demo se instala aparte de la versión completa.
+    applicationId demo ? 'cl.xiombo.faro.demo' : 'cl.xiombo.faro'
+    manifestPlaceholders = [appLabel: demo ? 'Faro Hundido Demo' : 'Faro Hundido']
     minSdk 24
     targetSdk 35
     versionCode 1

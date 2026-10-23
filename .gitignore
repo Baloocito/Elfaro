@@ -8,3 +8,4 @@ local.properties
 .kotlin/
 android/libs/
 .DS_Store
+assets/demo.flag
