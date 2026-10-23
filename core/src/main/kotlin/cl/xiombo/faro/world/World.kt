@@ -160,6 +160,7 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
     /** Atriles de la sala (x, y). Se apagan en la fase 3 del Cartógrafo. */
     val atriles = ArrayList<FloatArray>()
     var atrilesOn = true
+        private set
     /** Final C: se abrió el camino del Farero Antiguo en esta run. */
     var finalC = false
         private set
@@ -168,7 +169,6 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         private set
     /** Dónde quedó la lámpara apagada (cáscara), o null. */
     var husk: FloatArray? = null
-        private set
         private set
     private var shelfT = 0f
     /** Latido de la Raíz: s hasta el próximo; durante [beatBoostT] los enemigos van un 30 % más rápido. */
