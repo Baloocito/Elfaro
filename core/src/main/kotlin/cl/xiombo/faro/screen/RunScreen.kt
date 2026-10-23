@@ -45,7 +45,7 @@ class RunScreen : KtxScreen {
                 world.clearBanner()
                 menu.openTitle(RunSave.exists())
             }
-            is PauseMenu.Request.Test -> newWorld(World.testRun(r.floor, r.toBoss, r.toCell))
+            is PauseMenu.Request.Test -> newWorld(World.testRun(r.floor, r.toBoss, r.toCell, r.marea))
             is PauseMenu.Request.PlaySeed -> newWorld(World.newRun(r.seed))
         }
     }

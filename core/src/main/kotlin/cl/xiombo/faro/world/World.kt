@@ -87,8 +87,8 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
          * Run de prueba (menú principal → Niveles de prueba): empieza en [floor], opcionalmente directo
          * al jefe o a la celda del rescate. No guarda la run (no pisa una run real) ni da Perlas.
          */
-        fun testRun(floor: Int, toBoss: Boolean = false, toCell: Boolean = false): World =
-            World(Seed.random(), Kind.RUN, test = true).apply { initTest(floor, toBoss, toCell) }
+        fun testRun(floor: Int, toBoss: Boolean = false, toCell: Boolean = false, marea: Int = 0): World =
+            World(Seed.random(), Kind.RUN, test = true).apply { testMarea = marea; initTest(floor, toBoss, toCell) }
     }
 
     private var rng = Random(seed)
@@ -102,6 +102,7 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
     val seedCode get() = Seed.encode(seed)
     private var hazUses = 0
     private val bossLuz = ArrayList<Int>()
+    private var testMarea = 0
     private fun applyMarea() { Balance.marea = marea; Balance.baja = baja }
 
     var floorNum = 1
@@ -314,7 +315,7 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
     /** Run nueva con lo elegido en el Santuario. */
     private fun initRun() {
         baja = Meta.mareaBaja && !test
-        marea = if (baja || test) 0 else Meta.marea
+        marea = if (test) testMarea else if (baja) 0 else Meta.marea
         applyMarea()
         player.weapon = Meta.weapon
         // Marea 7: se empieza con 80 de Luz máxima.

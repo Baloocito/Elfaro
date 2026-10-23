@@ -29,7 +29,7 @@ class PauseMenu {
         object Continue : Request()
         object Play : Request()
         object ToTitle : Request()
-        class Test(val floor: Int, val toBoss: Boolean = false, val toCell: Boolean = false) : Request()
+        class Test(val floor: Int, val toBoss: Boolean = false, val toCell: Boolean = false, val marea: Int = 0) : Request()
         class PlaySeed(val seed: Long) : Request()
     }
 
@@ -216,6 +216,8 @@ class PauseMenu {
                 Item("Raíz del Faro  ·  piso 10") { finish(Request.Test(10)) },
                 Item("Jefe: La Lámpara Madre") { finish(Request.Test(12, toBoss = true)) },
                 Item("La celda de Amparo") { finish(Request.Test(1, toCell = true)) },
+                Item("Final C: Lámpara dormida (Marea 5)") { finish(Request.Test(12, toBoss = true, marea = 5)) },
+                Item("Marea 10: la criatura") { finish(Request.Test(12, toBoss = true, marea = 10)) },
                 Item("Volver") { setPage(Page.TITLE) },
             )
             Page.PAUSE -> listOf(
