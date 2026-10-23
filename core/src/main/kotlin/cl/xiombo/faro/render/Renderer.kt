@@ -881,7 +881,7 @@ class Renderer : Disposable {
             }
         }
         val lamp = w.boss as? LamparaMadre ?: return
-        if (lamp.killed) return
+        if (lamp.killed || lamp.dormant) return
         val h = w.room.height.toFloat()
         // Eco: la sala se tiñe del color del jefe copiado 1 s antes.
         lamp.echo?.let { e ->

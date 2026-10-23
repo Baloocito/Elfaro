@@ -44,8 +44,8 @@ class PauseMenu {
         const val ITEM_H = 17f
 
         /** Separación entre opciones: más juntas si hay muchas. */
-        fun step(n: Int) = if (n > 6) 15f else ITEM_STEP
-        fun itemH(n: Int) = if (n > 6) 13f else ITEM_H
+        fun step(n: Int) = if (n > 10) 13.5f else if (n > 6) 15f else ITEM_STEP
+        fun itemH(n: Int) = if (n > 10) 12f else if (n > 6) 13f else ITEM_H
 
         /** Y de la opción i cuando hay n (centradas un poco por encima de la mitad). */
         fun itemY(i: Int, n: Int) = 128f + (n - 1) * step(n) / 2f - i * step(n)
