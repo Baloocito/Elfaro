@@ -199,6 +199,7 @@ abstract class Enemy(val def: EnemyDef, x: Float, y: Float, val floor: Int, val 
             return true
         }
         hp -= if (stunned) amount * 1.25f else amount
+        if (kind == HitKind.MELEE || kind == HitKind.SLAM) w.sfx(if (isBoss || amount >= 20f) "hit_heavy" else "hit")
         when (kind) {
             HitKind.MELEE, HitKind.BLAST, HitKind.SLAM, HitKind.LAMP -> flash = 0.1f
             HitKind.HAZ -> flash = 0.03f

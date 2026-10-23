@@ -298,8 +298,8 @@ class PauseMenu {
                 }
             }
         } else {
-            if (mi.up || pad.navUp) sel = (sel + n - 1) % n
-            if (mi.down || pad.navDown) sel = (sel + 1) % n
+            if (mi.up || pad.navUp) { sel = (sel + n - 1) % n; cl.xiombo.faro.audio.Audio.play("ui_move") }
+            if (mi.down || pad.navDown) { sel = (sel + 1) % n; cl.xiombo.faro.audio.Audio.play("ui_move") }
         }
         // Opciones: izquierda/derecha bajan o suben los volúmenes.
         if (page == Page.OPTIONS && (mi.left || pad.navLeft || mi.right || pad.navRight)) {
@@ -324,7 +324,7 @@ class PauseMenu {
             }
             return
         }
-        if (choose in items.indices) items[choose].action()
+        if (choose in items.indices) { cl.xiombo.faro.audio.Audio.play("ui_ok"); items[choose].action() }
     }
 
     private fun updateConfig(pad: Gamepad, c: Controls, dt: Float) {

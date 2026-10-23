@@ -158,6 +158,7 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
             if (st.statue) w.placeStatue(x, y)
             if (st.saltDash) w.addSaltZone(x, y)
             dashT = Balance.DASH_TIME
+            w.sfx("dash")
             dashIframes = Balance.DASH_IFRAMES + st.dashIframesBonus
             dashHits.clear()
             if (dashCharges == st.dashCharges) dashRecharge = Balance.DASH_COOLDOWN * st.dashRechargeMul + Balance.DASH_TIME
@@ -216,7 +217,7 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
             if (veiling) inp.attackBuf = 0f
             if (inp.attackBuf > 0f && canAttack()) {
                 inp.attackBuf = 0f
-                startSwing()
+                startSwing(); w.sfx("swing")
             }
         }
         if (attacking) updateSwing(w, inp)
@@ -252,6 +253,7 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
             }
             veilT = 0f
         }
+        if (want && !veiling) w.sfx("veil")
         veiling = want
         veilK = approach(veilK, if (veiling) 1f else 0f, dt * 5f)
     }
@@ -344,7 +346,7 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
             comboTimer = Balance.COMBO_WINDOW
             if (inp.attackBuf > 0f && canAttack()) {
                 inp.attackBuf = 0f
-                startSwing()
+                startSwing(); w.sfx("swing")
             }
         }
     }
@@ -423,6 +425,7 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
 
     /** Campana: pulso alrededor de Isla que daña, aturde y abre paredes agrietadas. */
     private fun bellPulse(w: World) {
+        w.sfx("bell")
         val r = swingRange
         w.revealAt(cx, cy, r)
         w.fx.ring(cx, cy, r, Pal.SHELL)
@@ -442,6 +445,7 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
     }
 
     private fun throwHarpoon(w: World) {
+        w.sfx("harpoon")
         harpoon = Harpoon(cx + atkDx * 6f, cy + atkDy * 6f, atkDx, atkDy, 2 + weaponLevel, 1.5f - 0.3f * weaponLevel)
         w.fx.burst(cx + atkDx * 8f, cy + atkDy * 8f, 3, Pal.CREAM, 60f, 0.15f)
     }

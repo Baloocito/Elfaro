@@ -161,6 +161,9 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
     val atriles = ArrayList<FloatArray>()
     var atrilesOn = true
         private set
+    /** Sonidos pedidos en este paso; RunScreen los reproduce (la lógica no toca el audio). */
+    val sounds = ArrayList<String>()
+    fun sfx(name: String) { if (sounds.size < 16) sounds += name }
     /** Final C: se abrió el camino del Farero Antiguo en esta run. */
     var finalC = false
         private set
@@ -884,6 +887,7 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
     private fun clearRoom() {
         cell.cleared = true
         room.doorsOpen = true
+        sfx("door")
         if (cell.type == CellType.STAIRS) {
             val p = room.nearestFloor(room.width / 2f, room.height / 2f)
             cell.pedestals += Pedestal(p[0], p[1], PedKind.ESCALERA)
@@ -973,6 +977,7 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
             o.y += o.vy * dt
             if (d < 8f && o.age > 0.2f) {
                 gainLuz(o.value * stats.orbMul)
+                sfx("orb")
                 it.remove()
             }
         }
@@ -1043,6 +1048,7 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
     }
 
     private fun interact(p: Pedestal) {
+        sfx(if (p.kind == PedKind.ESCALERA || p.kind == PedKind.DESCENSO) "door" else "pickup")
         when (p.kind) {
             PedKind.EXVOTO -> {
                 if (!pay(p.price)) return
@@ -1105,6 +1111,7 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
                 startFloor(floorNum + 1)
             }
             PedKind.FIN -> {
+                sfx("victory")
                 mode = Mode.VICTORY
                 modeT = 0f
                 if (!test) {
@@ -1305,6 +1312,7 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
             }
         }
         room.update(dt, { tx, ty ->
+            sfx("glass")
             val c = room.tileCenter(tx, ty)
             fx.burst(c[0], c[1], 10, Pal.GLASS_LIGHT, 90f, 0.4f)
             fx.burst(c[0], c[1], 5, Pal.VIOLET, 70f, 0.35f)
@@ -1667,10 +1675,12 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         boss = f
         fx.burst(lamp.x, lamp.y, 20, Pal.STONE, 60f, 0.8f)
         showBanner("LA LÁMPARA NO TE VE. ALGUIEN SÍ.", 3.2f)
+        sfx("roar")
         addShake(3f)
     }
 
     fun onBossPhase(n: Int) {
+        sfx("roar")
         projectiles.clear()
         addShake(5f)
         if (boss is FareroAntiguo) {
@@ -1761,11 +1771,13 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
             else -> Pal.SHELL
         }
         fx.burst(e.x, e.y, 12, color, 90f, 0.45f)
+        sfx("kill")
         addShake(1.5f)
     }
 
     private fun onBossKilled() {
         val b = boss ?: return
+        sfx("boss_kill")
         projectiles.clear()
         pending.clear()
         brea = false
@@ -1853,7 +1865,7 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
             showBanner("LA MECHA DE RESERVA PRENDE", 1.8f)
         }
         p.luz -= total
-        hurtCount++
+        hurtCount++; sfx("hurt")
         if (stats.net) for (e in enemies) if (!e.killed && dist(e.x, e.y, p.cx, p.cy) < 64f) e.slow(0.5f, 2f)
         if (stats.thorns && src != null && !src.killed && !src.isBoss) src.takeHit(this, 10f, p.cx, p.cy, HitKind.SLAM)
         intact = false
@@ -1891,6 +1903,7 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
 
     private fun die() {
         player.luz = 0f
+        sfx("death")
         mode = Mode.DEAD
         modeT = 0f
         death = DeathInfo(
@@ -1962,6 +1975,7 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         val p = player
         val r = stats.flashRadius
         flashT = FLASH_TIME
+        sfx("flash")
         fx.ring(p.cx, p.cy, r, Pal.LAMP_HI)
         fx.ring(p.cx, p.cy, r * 0.55f, Pal.CREAM)
         fx.burst(p.cx, p.cy, 14, Pal.LAMP_HI, 160f, 0.35f)

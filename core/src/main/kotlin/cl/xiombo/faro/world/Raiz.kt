@@ -523,6 +523,7 @@ class FareroAntiguo(def: EnemyDef, x: Float, y: Float) : Enemy(def, x, y, 1, nul
             breathT -= dt
             if (breathT <= 0f) {
                 breathT = 8f
+                w.sfx("breath")
                 if (!p.veiling) w.hurtPlayer(15f, p.cx, p.cy - 10f, this, "La fosa respiró")
                 w.addShake(3f)
             }
