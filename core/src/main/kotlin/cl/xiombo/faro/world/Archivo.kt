@@ -1,5 +1,6 @@
 package cl.xiombo.faro.world
 
+import cl.xiombo.faro.data.Balance
 import cl.xiombo.faro.data.EnemyDef
 import cl.xiombo.faro.data.Pal
 import cl.xiombo.faro.util.dist
@@ -69,7 +70,7 @@ class Tinta(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) : Enem
             }
             EState.RECOVER -> {
                 stateT -= dt
-                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown }
+                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown * Balance.cooldownMul }
             }
             EState.DYING -> {}
         }
@@ -194,7 +195,7 @@ class Copista(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) : En
             }
             EState.RECOVER -> {
                 stateT -= dt
-                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown }
+                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown * Balance.cooldownMul }
             }
             else -> {}
         }
@@ -324,8 +325,10 @@ class Cartografo(def: EnemyDef, x: Float, y: Float) : Enemy(def, x, y, 1, null) 
         // Compás en cruz.
         compassT -= dt
         if (compassT <= 0f) {
-            for (k in 0 until 4) {
-                val a = compassA + k * PI.toFloat() / 2f
+            // Marea 5: la rosa de los vientos completa (8 direcciones).
+            val dirs = if (Balance.marea >= 5) 8 else 4
+            for (k in 0 until dirs) {
+                val a = compassA + k * PI.toFloat() * 2f / dirs
                 w.shoot(x, y, cos(a) * 110f, sin(a) * 110f, dmg, "Compás · ${def.name}", Pal.INK_HI)
             }
             compassA += PI.toFloat() / 4f

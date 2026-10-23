@@ -34,6 +34,8 @@ object RunSave {
         val owned: List<String>, val offered: List<String>,
         val mapRevealed: Boolean, val kills: Int, val time: Float, val perlasRun: Int,
         val cells: List<CellState>,
+        val marea: Int = 0, val baja: Boolean = false, val hazUses: Int = 0, val bossLuz: List<Int> = emptyList(),
+        val hero: String = "isla",
     )
 
     fun save(d: Data) {
@@ -44,6 +46,8 @@ object RunSave {
         kv(sb, "moved", d.moved ?: ""); kv(sb, "luz", d.luz); kv(sb, "luzMax", d.luzMax)
         kv(sb, "weapon", d.weapon); kv(sb, "wl", d.weaponLevel)
         kv(sb, "map", d.mapRevealed); kv(sb, "kills", d.kills); kv(sb, "time", d.time); kv(sb, "perlas", d.perlasRun)
+        kv(sb, "marea", d.marea); kv(sb, "baja", d.baja); kv(sb, "haz", d.hazUses); kv(sb, "hero", d.hero)
+        sb.append("\"bl\":").append(d.bossLuz.joinToString(",", "[", "]")).append(',')
         sb.append("\"owned\":").append(d.owned.joinToString(",", "[", "]") { "\"$it\"" }).append(',')
         sb.append("\"offered\":").append(d.offered.joinToString(",", "[", "]") { "\"$it\"" }).append(',')
         sb.append("\"cells\":[")
@@ -83,6 +87,8 @@ object RunSave {
             owned = strings(j.get("owned")), offered = strings(j.get("offered")),
             mapRevealed = j.getBoolean("map"), kills = j.getInt("kills"), time = j.getFloat("time"),
             perlasRun = j.getInt("perlas"),
+            marea = j.getInt("marea", 0), baja = j.getBoolean("baja", false), hazUses = j.getInt("haz", 0),
+            bossLuz = list(j.get("bl")).map { it.asInt() }, hero = j.getString("hero", "isla"),
             cells = list(j.get("cells")).map { c ->
                 CellState(
                     c.getInt("gx"), c.getInt("gy"), c.getBoolean("vi"), c.getBoolean("kn"), c.getBoolean("cl"),

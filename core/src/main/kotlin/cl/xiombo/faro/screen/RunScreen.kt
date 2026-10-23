@@ -1,5 +1,6 @@
 package cl.xiombo.faro.screen
 
+import cl.xiombo.faro.audio.Audio
 import cl.xiombo.faro.data.Balance
 import cl.xiombo.faro.input.Bindings
 import cl.xiombo.faro.input.Controls
@@ -44,7 +45,8 @@ class RunScreen : KtxScreen {
                 world.clearBanner()
                 menu.openTitle(RunSave.exists())
             }
-            is PauseMenu.Request.Test -> newWorld(World.testRun(r.floor, r.toBoss, r.toCell))
+            is PauseMenu.Request.Test -> newWorld(World.testRun(r.floor, r.toBoss, r.toCell, r.marea))
+            is PauseMenu.Request.PlaySeed -> newWorld(World.newRun(r.seed))
         }
     }
 
@@ -56,6 +58,7 @@ class RunScreen : KtxScreen {
         pad.poll()
         controls.menuOpen = menu.open
         menu.inRun = !world.inSanctuary && world.mode == World.Mode.PLAYING
+        menu.seedCode = if (world.inSanctuary) "" else world.seedCode
 
         if (menu.open) {
             menu.update(pad, controls)
@@ -88,11 +91,25 @@ class RunScreen : KtxScreen {
 
         if (world.hurtCount != lastHurt) {
             lastHurt = world.hurtCount
-            pad.rumble(180, 0.7f)
+            if (cl.xiombo.faro.data.Settings.rumble) pad.rumble(180, 0.7f)
         }
+
+        // Sonido: efectos pedidos por la lógica y la pista que toca ahora.
+        for (s in world.sounds) Audio.play(s)
+        world.sounds.clear()
+        Audio.music(trackFor(world))
+        Audio.update(delta)
 
         controls.useVisible = world.interactable != null
         renderer.render(world, acc / step, controls, menu, pad)
+    }
+
+    private fun trackFor(w: World): String = when {
+        w.inSanctuary -> "santuario"
+        w.mode == World.Mode.VICTORY || w.mode == World.Mode.DEAD -> ""
+        w.darkFight -> "oscuridad"
+        w.boss?.let { !it.killed && it.introduced } == true -> "jefe"
+        else -> w.biome.tag
     }
 
     private fun newWorld(w: World) {
@@ -108,5 +125,6 @@ class RunScreen : KtxScreen {
 
     override fun dispose() {
         renderer.dispose()
+        Audio.dispose()
     }
 }

@@ -12,6 +12,8 @@ class FaroGame : KtxGame<KtxScreen>() {
         EnemyDefs.load()
         RoomTemplates.load()
         Meta.load()
+        cl.xiombo.faro.data.Settings.load()
+        cl.xiombo.faro.data.RunLog.load()
         addScreen(RunScreen())
         setScreen<RunScreen>()
     }

@@ -1,5 +1,6 @@
 package cl.xiombo.faro.world
 
+import cl.xiombo.faro.data.Balance
 import cl.xiombo.faro.data.EnemyDef
 import cl.xiombo.faro.data.Pal
 import com.badlogic.gdx.math.MathUtils
@@ -58,7 +59,7 @@ class Monaguillo(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) :
             }
             EState.RECOVER -> {
                 stateT -= dt
-                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown }
+                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown * Balance.cooldownMul }
             }
             else -> {}
         }
@@ -97,7 +98,7 @@ class Campanero(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) : 
             }
             EState.RECOVER -> {
                 stateT -= dt
-                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown }
+                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown * Balance.cooldownMul }
             }
             else -> {}
         }
@@ -147,7 +148,7 @@ class Vela(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) : Enemy
             }
             EState.RECOVER -> {
                 stateT -= dt
-                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown }
+                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown * Balance.cooldownMul }
             }
             else -> {}
         }
@@ -194,7 +195,7 @@ class Cofrade(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) : En
             }
             EState.RECOVER -> {
                 stateT -= dt
-                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown }
+                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown * Balance.cooldownMul }
             }
             EState.DYING -> {}
         }
@@ -323,7 +324,7 @@ class Obispo(def: EnemyDef, x: Float, y: Float) : Enemy(def, x, y, 1, null) {
                         if (abs(diff) <= PI / 2 + 0.1f) w.hurtPlayer(dmg, x, y, this, "Barrido del báculo")
                     }
                     w.fx.burst(x + cos(sweepA) * 24f, y + sin(sweepA) * 24f, 10, Pal.CORAL_PINK, 110f, 0.3f)
-                    if (phase == 3) {
+                    if (phase == 3 || Balance.marea >= 5) {
                         for (i in 0 until 12) {
                             val a = i * MathUtils.PI2 / 12f + sweepA
                             w.shoot(x, y, cos(a) * 95f, sin(a) * 95f, dmg * 0.6f, "Esquirlas de coral · ${def.name}", Pal.CORAL_PINK)
@@ -332,7 +333,7 @@ class Obispo(def: EnemyDef, x: Float, y: Float) : Enemy(def, x, y, 1, null) {
                 }
             }
             Act.SWEEP -> if (actT <= 0f) {
-                cd = def.cooldown
+                cd = def.cooldown * Balance.cooldownMul
                 setAct(if (phase == 2) Act.ALTAR else Act.WALK, 0f)
             }
         }

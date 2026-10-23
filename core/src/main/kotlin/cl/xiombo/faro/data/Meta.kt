@@ -42,6 +42,17 @@ object Meta {
     var startExvoto: String? = null
     val unlocks = HashSet<String>()
     val bosses = HashSet<String>()
+    /** Marea elegida para la próxima run, la más alta desbloqueada y la Marea baja. */
+    var marea = 0
+    var mareaMax = 0
+    var mareaBaja = false
+    /** Finales vistos ("A", "B", "C"). */
+    val endings = HashSet<String>()
+    /** Personaje elegido: "isla" o "campanero". */
+    var hero = "isla"
+    /** Lotes de exvotos comprados (0-5). */
+    var lots = 0
+
     /** Botellas con mensaje leídas (ids de [Bottles]). Todas abren el final B. */
     val bottles = HashSet<String>()
     val allBottles get() = Bottles.all.all { it.id in bottles }
@@ -53,6 +64,12 @@ object Meta {
     /** Amparo, la guardesa: rescatarla en el Muelle abre la tienda del Santuario. */
     const val GUARDESA = "guardesa"
     val shopOpen get() = GUARDESA in unlocks
+    /** Náufragos rescatados (uno por bioma, §15). */
+    const val RESCUE_CAMPANERO = "rescate_campanero"
+    const val RESCUE_CARTOGRAFA = "rescate_cartografa"
+    const val HIJA = "hija"
+    /** El Campanero renegado comprado: se puede elegir como personaje. */
+    val campaneroPlayable get() = CAMPANERO in unlocks
 
     fun load() {
         runCatching {
@@ -62,6 +79,12 @@ object Meta {
             unlocks.clear(); unlocks += p.getString("meta.unlocks", "").split(',').filter { it.isNotBlank() }
             bosses.clear(); bosses += p.getString("meta.bosses", "").split(',').filter { it.isNotBlank() }
             bottles.clear(); bottles += p.getString("meta.bottles", "").split(',').filter { it.isNotBlank() }
+            mareaMax = p.getInteger("meta.mareaMax", 0).coerceIn(0, Mareas.MAX)
+            marea = p.getInteger("meta.marea", 0).coerceIn(0, mareaMax)
+            mareaBaja = p.getBoolean("meta.baja", false)
+            endings.clear(); endings += p.getString("meta.endings", "").split(',').filter { it.isNotBlank() }
+            hero = p.getString("meta.hero", "isla")
+            lots = p.getInteger("meta.lots", 0).coerceIn(0, Exvotos.LOTS)
             weapon = runCatching { Weapon.valueOf(p.getString("meta.weapon", "FAROL")) }.getOrDefault(Weapon.FAROL)
             if (!isUnlocked(weapon)) weapon = Weapon.FAROL
             startExvoto = p.getString("meta.startExvoto", "").ifBlank { null }
@@ -76,6 +99,12 @@ object Meta {
             p.putString("meta.unlocks", unlocks.joinToString(","))
             p.putString("meta.bosses", bosses.joinToString(","))
             p.putString("meta.bottles", bottles.joinToString(","))
+            p.putInteger("meta.mareaMax", mareaMax)
+            p.putInteger("meta.marea", marea)
+            p.putBoolean("meta.baja", mareaBaja)
+            p.putString("meta.endings", endings.joinToString(","))
+            p.putString("meta.hero", hero)
+            p.putInteger("meta.lots", lots)
             p.putString("meta.weapon", weapon.name)
             p.putString("meta.startExvoto", startExvoto ?: "")
             p.flush()

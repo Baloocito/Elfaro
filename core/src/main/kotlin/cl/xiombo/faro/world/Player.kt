@@ -128,7 +128,7 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
             dashRecharge -= dt
             if (dashRecharge <= 0f) {
                 dashCharges++
-                dashRecharge = Balance.DASH_COOLDOWN
+                dashRecharge = Balance.DASH_COOLDOWN * st.dashRechargeMul
             }
         }
 
@@ -156,9 +156,12 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
             inp.dashBuf = 0f
             if (moving) { dashDx = lastMoveX; dashDy = lastMoveY } else { dashDx = aimX; dashDy = aimY }
             if (st.statue) w.placeStatue(x, y)
+            if (st.saltDash) w.addSaltZone(x, y)
             dashT = Balance.DASH_TIME
-            dashIframes = Balance.DASH_IFRAMES
-            if (dashCharges == st.dashCharges) dashRecharge = Balance.DASH_COOLDOWN + Balance.DASH_TIME
+            w.sfx("dash")
+            dashIframes = Balance.DASH_IFRAMES + st.dashIframesBonus
+            dashHits.clear()
+            if (dashCharges == st.dashCharges) dashRecharge = Balance.DASH_COOLDOWN * st.dashRechargeMul + Balance.DASH_TIME
             dashCharges--
             dashTick = 0
             atkFrame = -1
@@ -170,6 +173,15 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
             if (inp.hazBuf > 0f) inp.hazBuf = Balance.INPUT_BUFFER   // se guarda hasta terminar el Destello
             w.room.move(this, dashDx * Balance.DASH_SPEED * dt, dashDy * Balance.DASH_SPEED * dt)
             if (dashTick++ % 3 == 0) w.fx.ghost(x, y)
+            if (st.saltDash && dashTick % 4 == 0) w.addSaltZone(x, y)
+            // Marea viva: el Destello hace 12 de daño a quien atraviesa.
+            if (st.tideDash) for (e in w.enemies) {
+                if (!e.targetable || e in dashHits) continue
+                if ((e.x - x) * (e.x - x) + (e.y - y) * (e.y - y) < (e.radius + 6f) * (e.radius + 6f)) {
+                    dashHits += e
+                    e.takeHit(w, 12f, x, y, HitKind.MELEE)
+                }
+            }
             vx = dashDx * Balance.SPEED
             vy = dashDy * Balance.SPEED
             coyote = 0f
@@ -205,13 +217,13 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
             if (veiling) inp.attackBuf = 0f
             if (inp.attackBuf > 0f && canAttack()) {
                 inp.attackBuf = 0f
-                startSwing()
+                startSwing(); w.sfx("swing")
             }
         }
         if (attacking) updateSwing(w, inp)
 
         // Movimiento con aceleración y frenado
-        var max = Balance.SPEED
+        var max = Balance.SPEED * st.speedBonus * heroSpeed
         if (attacking) max *= weapon.moveFactor else if (hazT <= 0f) max *= st.windSpeed
         if (hazT > 0f) max *= Balance.HAZ_MOVE_FACTOR
         if (veiling) max *= st.veilSpeed
@@ -241,6 +253,7 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
             }
             veilT = 0f
         }
+        if (want && !veiling) w.sfx("veil")
         veiling = want
         veilK = approach(veilK, if (veiling) 1f else 0f, dt * 5f)
     }
@@ -298,9 +311,15 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
 
     /** Empezó un golpe en este tick (lo graba World para el clon de papel del Cartógrafo). */
     var swingStarted = false
+    private var hitCount = 0
+    private var bellowsDone = false
+    private val dashHits = HashSet<Enemy>()
+    /** El Campanero renegado es un poco más lento. */
+    var heroSpeed = 1f
 
     private fun startSwing() {
         swingStarted = true
+        bellowsDone = false
         atkFrame = 0
         atkDx = aimX
         atkDy = aimY
@@ -327,7 +346,7 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
             comboTimer = Balance.COMBO_WINDOW
             if (inp.attackBuf > 0f && canAttack()) {
                 inp.attackBuf = 0f
-                startSwing()
+                startSwing(); w.sfx("swing")
             }
         }
     }
@@ -337,9 +356,13 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
         val st = w.stats
         var d = base
         if (!e.hitByPlayer) d += st.firstHitBonus
+        d += st.flatDmg
         if (e.slowed) d *= st.slowedBonus
         if (e.isElite || e.isBoss) d *= st.eliteBonus
-        return d
+        if (e.isBoss) d *= st.bossMul
+        if (e.burnT > 0f) d *= st.burnedBonus
+        if (e.hp < e.maxHp * 0.25f) d *= st.lowHpBonus
+        return d * st.dmgMul
     }
 
     private fun baseDamage(w: World): Float = when (weapon) {
@@ -356,6 +379,11 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
         if (swingIsThird) e.burn(st.burnTime)
         if (swingIsThird && st.thirdHitSlow) e.slow(0.7f, 1.5f)
         if (st.setSal) e.slow(0.8f, 1f)
+        if (st.coarseSalt) e.slow(0.9f, 1f)
+        // Campanilla: cada 5.º golpe aturde.
+        if (st.bellEvery5 && ++hitCount % 5 == 0) { e.stun(0.5f); w.fx.ring(e.x, e.y, e.radius + 6f, Pal.SHELL) }
+        // Fuelle: el 3.er golpe del combo estalla en fuego (una vez por golpe).
+        if (st.bellows && swingIsThird && !bellowsDone) { bellowsDone = true; w.fireBlast(e.x, e.y) }
         // Conjunto Hueso: remata a lo que queda por debajo del 15 %.
         if (st.setHueso && !e.isBoss && !e.killed && e.hp < e.maxHp * 0.15f) {
             e.takeHit(w, e.hp + 1f, cx, cy, HitKind.SLAM)
@@ -367,6 +395,7 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
 
     /** Farol (cono de 60°) y Ancla (arco de 180°). */
     private fun hitCone(w: World) {
+        val st = w.stats
         val cosHalf = cos(Math.toRadians(swingHalfAngleDeg.toDouble())).toFloat()
         val range = swingRange
         w.igniteAt(cx + atkDx * range * 0.6f, cy + atkDy * range * 0.6f, range * 0.6f)
@@ -384,10 +413,10 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
                     // Empuja ~40 px (+10 por mejora) y aturde si choca contra una pared.
                     val push = 240f + 28f * weaponLevel
                     val l = if (d > 0.5f) d else 1f
-                    e.knock(dx / l, dy / l, push, 0.8f + 0.2f * weaponLevel)
+                    e.knock(dx / l, dy / l, push * st.knockMul, 0.8f + 0.2f * weaponLevel)
                     w.addShake(2f)
                 } else {
-                    e.knock(atkDx, atkDy, if (swingIsThird) 150f else 80f)
+                    e.knock(atkDx, atkDy, (if (swingIsThird) 150f else 80f) * st.knockMul)
                 }
                 onHit(w, e)
             }
@@ -396,6 +425,7 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
 
     /** Campana: pulso alrededor de Isla que daña, aturde y abre paredes agrietadas. */
     private fun bellPulse(w: World) {
+        w.sfx("bell")
         val r = swingRange
         w.revealAt(cx, cy, r)
         w.fx.ring(cx, cy, r, Pal.SHELL)
@@ -415,6 +445,7 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
     }
 
     private fun throwHarpoon(w: World) {
+        w.sfx("harpoon")
         harpoon = Harpoon(cx + atkDx * 6f, cy + atkDy * 6f, atkDx, atkDy, 2 + weaponLevel, 1.5f - 0.3f * weaponLevel)
         w.fx.burst(cx + atkDx * 8f, cy + atkDy * 8f, 3, Pal.CREAM, 60f, 0.15f)
     }
@@ -440,7 +471,7 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
                     if ((e.x - h.x) * (e.x - h.x) + (e.y - h.y) * (e.y - h.y) > (e.radius + 4f) * (e.radius + 4f)) continue
                     h.hitSet += e
                     if (e.takeHit(w, weaponDamage(w, e, 14f), h.x - h.dx * 10f, h.y - h.dy * 10f, HitKind.MELEE)) {
-                        e.knock(h.dx, h.dy, 60f)
+                        e.knock(h.dx, h.dy, 60f * w.stats.knockMul)
                         onHit(w, e)
                         h.hits++
                         if (h.hits >= h.pierce) { h.st = Harpoon.St.STUCK; return }
@@ -492,6 +523,7 @@ class Player(x: Float, y: Float) : Body(x, y, 4f, 3f) {
                 var d = Balance.HAZ_DPS * dt
                 if (e.isElite || e.isBoss) d *= w.stats.eliteBonus
                 e.takeHit(w, d, cx, cy, HitKind.HAZ)
+                if (w.stats.hazBurns) e.burn(1f)
             }
         }
         hazTick++

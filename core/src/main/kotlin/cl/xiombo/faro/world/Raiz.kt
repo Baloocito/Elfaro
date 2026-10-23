@@ -1,5 +1,6 @@
 package cl.xiombo.faro.world
 
+import cl.xiombo.faro.data.Balance
 import cl.xiombo.faro.data.EnemyDef
 import cl.xiombo.faro.data.Pal
 import cl.xiombo.faro.data.Weapon
@@ -101,7 +102,7 @@ class HijoDelFaro(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) 
             }
             EState.RECOVER -> {
                 stateT -= dt
-                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown }
+                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown * Balance.cooldownMul }
             }
             else -> {}
         }
@@ -174,7 +175,7 @@ class Vidriero(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) : E
             }
             EState.RECOVER -> {
                 stateT -= dt
-                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown }
+                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown * Balance.cooldownMul }
             }
             else -> {}
         }
@@ -230,7 +231,7 @@ class OjoFosa(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) : En
             }
             EState.RECOVER -> {
                 stateT -= dt
-                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown }
+                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown * Balance.cooldownMul }
             }
             else -> {}
         }
@@ -265,9 +266,12 @@ class LamparaMadre(def: EnemyDef, x: Float, y: Float) : Enemy(def, x, y, 1, null
 
     override val isBoss: Boolean get() = true
     override val blockedByWater: Boolean get() = false
-    override val introduced: Boolean get() = introT <= 1.2f
+    override val introduced: Boolean get() = introT <= 1.2f && !dormant
+    /** Marea 5+: la lámpara duerme hasta que te acercas sin velar. Velar 3 s cerca abre el final C. */
+    var dormant = Balance.marea >= 5
+    var veilNearT = 0f
     override val phaseMarks: FloatArray get() = MARKS
-    override val targetable get() = !killed && introT <= 0f && roarT <= 0f
+    override val targetable get() = !killed && introT <= 0f && roarT <= 0f && !dormant
     override val lightRadius: Float get() = if (killed) 0f else 70f + 10f * sin(anim * 2f)
 
     var phase = 1
@@ -316,6 +320,16 @@ class LamparaMadre(def: EnemyDef, x: Float, y: Float) : Enemy(def, x, y, 1, null
 
     override fun think(w: World, dt: Float) {
         if (killed) return
+        if (dormant) {
+            val p = w.player
+            val d = sqrt((p.cx - x) * (p.cx - x) + (p.cy - y) * (p.cy - y))
+            if (p.veiling && d < 120f) {
+                veilNearT += dt
+                if (veilNearT >= 3f) { w.startFinalC(this); return }
+            } else if (!p.veiling) veilNearT = 0f
+            if (d < 100f && !p.veiling) dormant = false
+            return
+        }
         if (introT > 0f) { introT -= dt; return }
         if (roarT > 0f) { roarT -= dt; return }
         if (phase == 1 && hp <= maxHp * 0.75f) { phase = 2; roarT = 1.2f; beamWarnT = 0.6f; flipT = 8f; w.onBossPhase(2); return }
@@ -330,6 +344,8 @@ class LamparaMadre(def: EnemyDef, x: Float, y: Float) : Enemy(def, x, y, 1, null
                 rootT = if (phase == 1) 4f else 3.2f
                 val p = w.player
                 w.traps += Trap(p.cx, p.y, 14f, 0.5f, dmg, "Raíz · ${def.name}", this, Trap.Kind.ROOT)
+                // Marea 5: las raíces salen de a dos.
+                if (Balance.marea >= 5) w.traps += Trap(p.cx + MathUtils.random(-40f, 40f), p.y + MathUtils.random(-30f, 30f), 14f, 0.7f, dmg, "Raíz · ${def.name}", this, Trap.Kind.ROOT)
             }
         }
         if (phase == 2) {
@@ -433,5 +449,210 @@ class LamparaMadre(def: EnemyDef, x: Float, y: Float) : Enemy(def, x, y, 1, null
         private val MARKS = floatArrayOf(0.75f, 0.5f, 0.2f)
         /** Los haces salen del borde de la base (que es sólida). */
         const val BEAM_START = 22f
+    }
+}
+
+/**
+ * El Farero Antiguo (final C, §9). Pelea a oscuras: tu radio no pasa de 80 px.
+ * Fase 1 (100-60 %): busca con su farol (un cono que barre la sala). Si te ve sin velar, avisa 0,6 s
+ *   y lanza 3 garfios. De cerca da un bastonazo.
+ * Fase 2 (60-25 %): apaga su farol y carga hacia tu luz (huellas 0,5 s antes). Si velas, te pierde
+ *   y queda expuesto 1,5 s (+50 % de daño).
+ * Fase 3 (25-0 %): la fosa respira cada 8 s: si no estás velando, te quita 15 de Luz.
+ */
+class FareroAntiguo(def: EnemyDef, x: Float, y: Float) : Enemy(def, x, y, 1, null) {
+    enum class Act { INTRO, SEARCH, SPOTTED, WALK_STRIKE, CHARGE_WARN, CHARGE, EXPOSED, ROAR }
+
+    override val isBoss: Boolean get() = true
+    override val blockedByWater: Boolean get() = false
+    override val introduced: Boolean get() = !(act == Act.INTRO && actT > 1.5f)
+    override val phaseMarks: FloatArray get() = MARKS
+    override val needsLight: Boolean get() = !lanternOn
+    override val targetable get() = !killed && act != Act.INTRO && act != Act.ROAR && !hidden
+    override val lightRadius: Float get() = if (killed || !lanternOn) 0f else 26f
+
+    var phase = 1
+        private set
+    var act = Act.INTRO
+        private set
+    var actT = 3f
+        private set
+    /** Ángulo del farol (cono de búsqueda). */
+    var lanternA = -PI.toFloat() / 2f
+        private set
+    val lanternOn get() = phase == 1 || (phase == 3 && act != Act.CHARGE && act != Act.CHARGE_WARN)
+    private var chargeX = 0f
+    private var chargeY = 0f
+    private var nextChargeT = 3f
+    var breathT = 8f
+        private set
+    private var exposedDmg = false
+
+    private fun setAct(a: Act, t: Float) { act = a; actT = t }
+
+    override fun takeHit(w: World, amount: Float, fromX: Float, fromY: Float, kind: HitKind): Boolean =
+        super.takeHit(w, if (act == Act.EXPOSED) amount * 1.5f else amount, fromX, fromY, kind)
+
+    /** ¿Isla está dentro del cono del farol? */
+    fun sees(w: World): Boolean {
+        val p = w.player
+        if (!lanternOn || p.veiling) return false
+        val dx = p.cx - x
+        val dy = p.cy - y
+        val d = sqrt(dx * dx + dy * dy)
+        if (d > CONE_LEN || d < 1f) return d < 1f
+        val a = atan2(dy, dx)
+        var diff = a - lanternA
+        while (diff > PI) diff -= (2 * PI).toFloat()
+        while (diff < -PI) diff += (2 * PI).toFloat()
+        return abs(diff) < CONE_HALF
+    }
+
+    override fun think(w: World, dt: Float) {
+        if (killed) return
+        actT -= dt
+        val p = w.player
+        if (phase == 1 && hp <= maxHp * 0.6f) { phase = 2; setAct(Act.ROAR, 1.4f); w.onBossPhase(2); return }
+        if (phase == 2 && hp <= maxHp * 0.25f) { phase = 3; breathT = 4f; setAct(Act.ROAR, 1.4f); w.onBossPhase(3); return }
+        val dx = p.cx - x
+        val dy = p.cy - y
+        val d = max(0.001f, sqrt(dx * dx + dy * dy))
+
+        // Fase 3: la fosa respira.
+        if (phase == 3) {
+            breathT -= dt
+            if (breathT <= 0f) {
+                breathT = 8f
+                w.sfx("breath")
+                if (!p.veiling) w.hurtPlayer(15f, p.cx, p.cy - 10f, this, "La fosa respiró")
+                w.addShake(3f)
+            }
+        }
+
+        when (act) {
+            Act.INTRO, Act.ROAR -> if (actT <= 0f) setAct(if (phase == 2) Act.WALK_STRIKE else Act.SEARCH, 0f)
+            Act.SEARCH -> {
+                // Camina despacio y barre con el farol hacia donde cree que estás.
+                val want = if (p.veiling) lanternA + dt * 1.2f else atan2(dy, dx)
+                var diff = want - lanternA
+                while (diff > PI) diff -= (2 * PI).toFloat()
+                while (diff < -PI) diff += (2 * PI).toFloat()
+                lanternA += diff.coerceIn(-1.4f * dt, 1.4f * dt)
+                if (!p.veiling && d > 40f) w.room.move(this, dx / d * spd * 0.5f * dt, dy / d * spd * 0.5f * dt)
+                if (sees(w)) setAct(Act.SPOTTED, Balance.telegraph(0.6f))
+                else if (d < 34f && cd <= 0f) { dirX = dx / d; dirY = dy / d; setAct(Act.WALK_STRIKE, 0f); beginTelegraph(0.5f) }
+                cd -= dt
+                if (phase == 3) {
+                    nextChargeT -= dt
+                    if (nextChargeT <= 0f && !p.veiling) startCharge(p)
+                }
+            }
+            Act.SPOTTED -> if (actT <= 0f) {
+                for (i in -1..1) {
+                    val a = atan2(dy, dx) + i * 0.22f
+                    w.shoot(x, y, cos(a) * 150f, sin(a) * 150f, dmg, "Garfio · ${def.name}", Pal.STONE)
+                }
+                cd = 0.8f
+                setAct(Act.SEARCH, 0f)
+            }
+            Act.WALK_STRIKE -> {
+                if (state == EState.TELEGRAPH) {
+                    stateT -= dt
+                    if (stateT <= 0f) {
+                        if (p.hurtOverlaps(x + dirX * 14f, y + dirY * 14f, 20f)) w.hurtPlayer(dmg, x, y, this, "Bastonazo")
+                        state = EState.MOVE
+                        cd = def.cooldown
+                        setAct(if (phase == 2) Act.WALK_STRIKE else Act.SEARCH, 0f)
+                    }
+                    return
+                }
+                // Fase 2: sin farol, va hacia tu luz y carga.
+                if (phase == 2) {
+                    cd -= dt
+                    nextChargeT -= dt
+                    if (!p.veiling && d > 30f) w.room.move(this, dx / d * spd * 0.6f * dt, dy / d * spd * 0.6f * dt)
+                    if (nextChargeT <= 0f && !p.veiling) startCharge(p)
+                    else if (d < 34f && cd <= 0f) { dirX = dx / d; dirY = dy / d; beginTelegraph(0.5f) }
+                }
+            }
+            Act.CHARGE_WARN -> if (actT <= 0f) setAct(Act.CHARGE, 0.6f)
+            Act.CHARGE -> {
+                // Si velas durante la carga, te pierde y queda expuesto.
+                if (p.veiling) { setAct(Act.EXPOSED, 1.5f); w.fx.floater("¡TE PERDIÓ!", x, y + 24f, Pal.LAMP_HI); return }
+                val cx = chargeX - x
+                val cy = chargeY - y
+                val cdist = sqrt(cx * cx + cy * cy)
+                if (cdist < 6f || actT <= 0f || w.room.move(this, cx / cdist * 230f * dt, cy / cdist * 230f * dt)) {
+                    setAct(Act.EXPOSED, 1.0f)
+                } else if (p.hurtOverlaps(x, y, radius + 2f)) {
+                    w.hurtPlayer(dmg * 1.3f, x, y, this, "Embestida a oscuras")
+                }
+            }
+            Act.EXPOSED -> if (actT <= 0f) setAct(if (phase == 2) Act.WALK_STRIKE else Act.SEARCH, 0f)
+        }
+    }
+
+    private fun startCharge(p: Player) {
+        chargeX = p.cx; chargeY = p.cy
+        nextChargeT = if (phase == 3) 6f else 4f
+        setAct(Act.CHARGE_WARN, Balance.telegraph(0.5f))
+    }
+
+    companion object {
+        private val MARKS = floatArrayOf(0.6f, 0.25f)
+        const val CONE_LEN = 170f
+        const val CONE_HALF = 0.42f
+    }
+}
+
+/**
+ * Marea 10: la criatura se suelta de la lámpara y te persigue por la arena a oscuras. Solo se ve
+ * su respiración luminosa. Velar la despista; tras cada embestida queda expuesta.
+ */
+class Criatura(def: EnemyDef, x: Float, y: Float) : Enemy(def, x, y, 1, null) {
+    override val isBoss: Boolean get() = true
+    override val blockedByWater: Boolean get() = false
+    override val needsLight: Boolean get() = !exposed
+    var breath = 0f
+        private set
+    override val lightRadius: Float get() = if (killed) 0f else 10f + 30f * breath
+    var exposedT = 0f
+        private set
+    val exposed get() = exposedT > 0f
+    private var wanderA = 0f
+    private var hitDone = false
+
+    override fun think(w: World, dt: Float) {
+        if (killed) return
+        breath = (sin(anim * 1.6f) * 0.5f + 0.5f)
+        exposedT -= dt
+        if (exposed) return
+        val p = w.player
+        val dx = p.cx - x
+        val dy = p.cy - y
+        val d = max(0.001f, sqrt(dx * dx + dy * dy))
+        when (state) {
+            EState.MOVE -> {
+                cd -= dt
+                if (p.veiling) {
+                    wanderA += MathUtils.random(-2f, 2f) * dt
+                    if (w.room.move(this, cos(wanderA) * spd * 0.4f * dt, sin(wanderA) * spd * 0.4f * dt)) wanderA += PI.toFloat()
+                } else {
+                    w.room.move(this, dx / d * spd * dt, dy / d * spd * dt)
+                    if (d < def.range && cd <= 0f) { dirX = dx / d; dirY = dy / d; beginTelegraph(def.telegraph) }
+                }
+            }
+            EState.TELEGRAPH -> {
+                stateT -= dt
+                if (stateT <= 0f) { state = EState.ATTACK; stateT = 0.35f; hitDone = false }
+            }
+            EState.ATTACK -> {
+                w.room.move(this, dirX * 240f * dt, dirY * 240f * dt)
+                if (!hitDone && p.hurtOverlaps(x, y, radius) && w.hurtPlayer(dmg, x, y, this, "La criatura")) hitDone = true
+                stateT -= dt
+                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown; exposedT = 1.6f }
+            }
+            else -> {}
+        }
     }
 }

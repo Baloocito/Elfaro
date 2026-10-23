@@ -4,7 +4,12 @@ import cl.xiombo.faro.data.Balance
 import cl.xiombo.faro.data.Biome
 import cl.xiombo.faro.data.Story
 import cl.xiombo.faro.data.Bottles
+import cl.xiombo.faro.data.Mareas
+import cl.xiombo.faro.data.Settings
+import cl.xiombo.faro.data.RunLog
 import cl.xiombo.faro.world.Anguila
+import cl.xiombo.faro.world.Criatura
+import cl.xiombo.faro.world.FareroAntiguo
 import cl.xiombo.faro.world.Bibliotecario
 import cl.xiombo.faro.world.Campanero
 import cl.xiombo.faro.world.Cartografo
@@ -192,8 +197,9 @@ class Renderer : Disposable {
         val cy = if (r.height <= ih) r.height / 2f else py.coerceIn(ih / 2f, r.height - ih / 2f)
         camLeft = (cx - iw / 2f).roundToInt().toFloat()
         camBottom = (cy - ih / 2f).roundToInt().toFloat()
-        val sx = if (w.shake > 0f) MathUtils.random(-w.shake, w.shake) else 0f
-        val sy = if (w.shake > 0f) MathUtils.random(-w.shake, w.shake) else 0f
+        val sh = if (Settings.shake) w.shake else 0f
+        val sx = if (sh > 0f) MathUtils.random(-sh, sh) else 0f
+        val sy = if (sh > 0f) MathUtils.random(-sh, sh) else 0f
         cam.position.set(camLeft + iw / 2f + sx.roundToInt(), camBottom + ih / 2f + sy.roundToInt(), 0f)
         cam.update()
     }
@@ -259,9 +265,19 @@ class Renderer : Disposable {
             shapes.rect(iw / 2f - 70f, 226f, 140f, 1f)
         }
         for (i in 0 until n) {
-            val y = PauseMenu.itemY(i, n)
+            val y = PauseMenu.itemYFor(m.page, i, n)
             col(if (i == m.sel) Pal.LAMP else Pal.NIGHT, if (i == m.sel) 0.9f else 0.8f)
             shapes.rect(x0, y - PauseMenu.itemH(n) / 2f, PauseMenu.ITEM_W, PauseMenu.itemH(n))
+        }
+        if (m.page == PauseMenu.Page.SEED) {
+            for (i in 0 until m.seedChars.size) {
+                val sx = PauseMenu.seedSlotX(i)
+                col(if (i == m.seedSlot) Pal.LAMP else Pal.NIGHT, 0.9f)
+                shapes.rect(sx + 1f, PauseMenu.SEED_Y - PauseMenu.SEED_H / 2f, PauseMenu.SEED_W - 2f, PauseMenu.SEED_H)
+                col(Pal.CREAM, 0.5f)
+                shapes.triangle(sx + 8f, PauseMenu.SEED_Y + 10f, sx + 16f, PauseMenu.SEED_Y + 10f, sx + 12f, PauseMenu.SEED_Y + 14f)
+                shapes.triangle(sx + 8f, PauseMenu.SEED_Y - 10f, sx + 16f, PauseMenu.SEED_Y - 10f, sx + 12f, PauseMenu.SEED_Y - 14f)
+            }
         }
         shapes.end()
 
@@ -272,8 +288,26 @@ class Renderer : Disposable {
         if (m.page == PauseMenu.Page.TITLE) text("Perlas ${Meta.perlas}" + if (Meta.shopOpen) "" else "  ·  la tienda del Santuario sigue cerrada", iw / 2f, 220f, Pal.SHELL, align = 0)
         if (m.page == PauseMenu.Page.TESTS) text("Runs de prueba: no guardan ni dan Perlas", iw / 2f, 220f, Pal.SHELL, align = 0)
         labels.forEachIndexed { i, label ->
-            val y = PauseMenu.itemY(i, n) + if (n > 6) 4f else 5f
+            val y = PauseMenu.itemYFor(m.page, i, n) + if (n > 6) 4f else 5f
             text(label, iw / 2f, y, if (i == m.sel) Pal.OUTLINE else Pal.CREAM, align = 0)
+        }
+        if (m.page == PauseMenu.Page.SEED) {
+            for (i in 0 until m.seedChars.size) {
+                text(m.seedChars[i].toString(), PauseMenu.seedSlotX(i) + PauseMenu.SEED_W / 2f, PauseMenu.SEED_Y + 4f, if (i == m.seedSlot) Pal.OUTLINE else Pal.CREAM, align = 0)
+            }
+            text("Arriba/abajo cambian la letra · izquierda/derecha, la casilla · toca arriba o abajo de una letra", iw / 2f, 140f, Pal.SHELL, align = 0, wrap = iw * 0.9f)
+        }
+        if (m.page == PauseMenu.Page.LOG) {
+            if (RunLog.entries.isEmpty()) text("Todavía no hay runs registradas.", iw / 2f, 150f, Pal.SHELL, align = 0)
+            RunLog.entries.take(9).forEachIndexed { i, e ->
+                val mm = (e.time / 60f).toInt()
+                val ss = (e.time % 60f).toInt()
+                val bl = if (e.bossLuz.isEmpty()) "-" else e.bossLuz.joinToString("/")
+                val line = "${e.result}  piso ${e.floor}  ${Mareas.label(e.marea, e.baja)}  ${mm}:${ss.toString().padStart(2, '0')}  " +
+                    "${e.kills} bajas  Haz ${e.hazUses}  Luz en jefes $bl  ${e.seed}"
+                text(line, iw / 2f, 206f - i * 18f, if (e.result == "VICTORIA") Pal.LAMP_HI else Pal.CREAM, align = 0)
+                text(e.cause, iw / 2f, 198f - i * 18f, Pal.SHELL, align = 0)
+            }
         }
         val ctl = pad.controller
         if (n <= 6) text(if (ctl == null) "Sin mando conectado" else "Mando: ${ctl.name.take(40)}", iw / 2f, 64f, Pal.SHELL, align = 0)
@@ -759,6 +793,10 @@ class Renderer : Disposable {
     /** Trampas, líneas del Copista, rastro de tinta, haces y ecos de la Lámpara, avisos de la Anguila y del Ojo. */
     private fun drawArchivoRaiz(w: World) {
         val blink = (w.time * 10f).toInt() % 2 == 0
+        for (z in w.saltZones) {
+            col(Pal.SALADO, 0.35f * (z[2] / 2f).coerceIn(0f, 1f))
+            shapes.circle(z[0], z[1], 12f, 12)
+        }
         for (dot in w.ink) {
             col(Pal.INK, (dot[2] / 3f).coerceIn(0f, 1f) * 0.9f)
             shapes.rect(dot[0] - 2f, dot[1] - 1f, 4f, 3f)
@@ -809,8 +847,41 @@ class Renderer : Disposable {
                 }
             }
         }
+        // Lámpara apagada: una cáscara de vidrio negro.
+        w.husk?.let { hk ->
+            val hx = hk[0]; val hy = hk[1]
+            col(Pal.SHADOW); shapes.ellipse(hx - 20f, hy - 22f, 40f, 8f)
+            outlined(hx - 14f, hy - 22f, 28f, 6f, Pal.STONE)
+            col(Pal.OUTLINE); shapes.rect(hx - 15f, hy - 16f, 30f, 34f)
+            col(Pal.RAZ_VOID); shapes.rect(hx - 14f, hy - 15f, 28f, 32f)
+            for (i in 0 until 4) { col(Pal.SEAM); shapes.rect(hx - 14f + i * 9f, hy - 15f, 2f, 32f) }
+            outlined(hx - 16f, hy + 17f, 32f, 4f, Pal.STONE)
+        }
+        // Farero: cono del farol y aviso de carga.
+        (w.boss as? FareroAntiguo)?.let { f ->
+            if (f.killed) return@let
+            if (f.lanternOn && f.act != FareroAntiguo.Act.INTRO) {
+                val spotted = f.act == FareroAntiguo.Act.SPOTTED
+                col(if (spotted && blink) Pal.CORAL else Pal.LAMP_HI, if (spotted) 0.32f else 0.16f)
+                val steps = 6
+                for (i in 0 until steps) {
+                    val a0 = f.lanternA - FareroAntiguo.CONE_HALF + 2f * FareroAntiguo.CONE_HALF * i / steps
+                    val a1 = f.lanternA - FareroAntiguo.CONE_HALF + 2f * FareroAntiguo.CONE_HALF * (i + 1) / steps
+                    shapes.triangle(f.x, f.y, f.x + cos(a0) * FareroAntiguo.CONE_LEN, f.y + sin(a0) * FareroAntiguo.CONE_LEN,
+                        f.x + cos(a1) * FareroAntiguo.CONE_LEN, f.y + sin(a1) * FareroAntiguo.CONE_LEN)
+                }
+            }
+            if (f.act == FareroAntiguo.Act.CHARGE_WARN) {
+                col(Pal.CORAL, if (blink) 0.7f else 0.35f)
+                shapes.rectLine(f.x, f.y, w.player.cx, w.player.cy, 1f)
+            }
+            if (f.phase == 3 && f.breathT < 1f) {
+                col(Pal.RAZ_VOID, 0.35f * (1f - f.breathT))
+                shapes.rect(0f, 0f, w.room.width.toFloat(), w.room.height.toFloat())
+            }
+        }
         val lamp = w.boss as? LamparaMadre ?: return
-        if (lamp.killed) return
+        if (lamp.killed || lamp.dormant) return
         val h = w.room.height.toFloat()
         // Eco: la sala se tiñe del color del jefe copiado 1 s antes.
         lamp.echo?.let { e ->
@@ -987,6 +1058,19 @@ class Renderer : Disposable {
                 col(Pal.TIDE, 0.6f + 0.3f * bob)
                 shapes.ellipse(x - 8f, y - 4f, 16f, 8f)
             }
+            PedKind.MAREA -> {
+                // Escala de marea: un poste con 10 marcas; se llenan hasta la Marea elegida.
+                outlined(x - 2f, y - 6f, 4f, 30f, Pal.STONE)
+                val lvl = if (Meta.mareaBaja) 0 else Meta.marea
+                for (i in 0 until 10) {
+                    val on = i < lvl
+                    val unlocked = i < Meta.mareaMax
+                    col(if (on) Pal.TIDE else if (unlocked) Pal.WALL_TOP else Pal.SEAM)
+                    shapes.rect(x + 2f, y - 4f + i * 2.8f, if (i % 5 == 4) 5f else 3f, 1.5f)
+                }
+                col(if (Meta.mareaBaja) Pal.FOAM else Pal.TIDE, 0.6f + 0.3f * bob)
+                shapes.rect(x - 6f, y - 7f, 12f, 3f)
+            }
             PedKind.ARMA -> {
                 val locked = p.lockedText != null
                 if (p.selected) {
@@ -1023,7 +1107,7 @@ class Renderer : Disposable {
             }
             PedKind.JAULA -> {
                 // Barrotes de hierro; Amparo dentro hasta que la liberas.
-                if (!p.taken) drawAmparo(x, y - 2f, w.time)
+                if (!p.taken) drawNpc(p.metaId, x, y - 2f, w.time)
                 val open = p.taken
                 col(Pal.OUTLINE)
                 shapes.rect(x - 14f, y + 22f, 28f, 3f)
@@ -1042,6 +1126,22 @@ class Renderer : Disposable {
                 }
             }
             PedKind.AMPARO -> drawAmparo(x, y - 2f, w.time)
+            PedKind.NPC -> drawNpc(p.metaId, x, y - 2f, w.time)
+            PedKind.LOTE -> {
+                outlined(x - 7f, y - 6f, 14f, 8f, if (p.taken) Pal.LAMP_DIM else if (p.lockedText != null) Pal.SEAM else Pal.WALL_TOP)
+                // Un pozo pequeño con exvotos flotando.
+                for (i in 0 until 3) {
+                    val c = when (i) { 0 -> Pal.RARE; 1 -> Pal.EPIC; else -> Pal.CREAM }
+                    outlined(x - 6f + i * 5f, y + 4f + bob + (i % 2) * 2f, 3f, 3f, if (p.lockedText != null) Pal.SEAM else c)
+                }
+            }
+            PedKind.HEROE -> {
+                outlined(x - 6f, y - 6f, 12f, 6f, Pal.WALL_TOP)
+                val bruno = Meta.hero == "campanero"
+                outlined(x - 3f, y, 6f, 8f, if (bruno) Pal.VIOLET else Pal.COAT)
+                outlined(x - 2f, y + 8f, 4f, 4f, Pal.SKIN)
+                if (Meta.campaneroPlayable) { col(Pal.LAMP_HI, 0.5f + 0.4f * bob); shapes.rect(x - 7f, y + 13f, 14f, 1f) }
+            }
             PedKind.BOTELLA -> {
                 outlined(x - 3f, y - 4f + bob, 6f, 9f, Pal.GLASS_TEAL)
                 outlined(x - 1f, y + 5f + bob, 2f, 3f, Pal.GLASS_TEAL)
@@ -1078,6 +1178,40 @@ class Renderer : Disposable {
                 col(c)
                 shapes.rect(x - 2f, y + 5f + bob, 4f, 4f)
             }
+        }
+    }
+
+    /** Náufragos: cada uno con su silueta. */
+    private fun drawNpc(key: String?, x: Float, y: Float, t: Float) {
+        when (key) {
+            Meta.RESCUE_CAMPANERO -> {
+                col(Pal.SHADOW); shapes.ellipse(x - 5f, y - 3f, 10f, 4f)
+                outlined(x - 5f, y - 1f, 10f, 12f, Pal.VIOLET)
+                outlined(x - 4f, y + 11f, 8f, 7f, Pal.SKIN)
+                col(Pal.LILAC); shapes.rect(x - 4f, y + 11f, 8f, 1f)
+                col(Pal.OUTLINE); shapes.rect(x - 2f, y + 14f, 1f, 1f); shapes.rect(x + 1f, y + 14f, 1f, 1f)
+                val k = if ((t * 2f).toInt() % 2 == 0) 0f else 1f
+                col(Pal.STONE); shapes.triangle(x + 5f, y + 2f - k, x + 11f, y + 2f - k, x + 8f, y + 8f - k)
+            }
+            Meta.RESCUE_CARTOGRAFA -> {
+                col(Pal.SHADOW); shapes.ellipse(x - 5f, y - 3f, 10f, 4f)
+                outlined(x - 5f, y - 1f, 10f, 12f, Pal.PAPER_DIM)
+                col(Pal.INK); shapes.rect(x - 4f, y + 4f, 8f, 1f); shapes.rect(x, y, 1f, 9f)
+                outlined(x - 4f, y + 11f, 8f, 7f, Pal.SKIN)
+                col(Pal.BOOK_OCHRE); shapes.rect(x - 4f, y + 15f, 8f, 3f)
+                col(Pal.OUTLINE); shapes.rect(x - 2f, y + 13f, 1f, 1f); shapes.rect(x + 1f, y + 13f, 1f, 1f)
+                outlined(x + 5f, y + 1f, 2f, 9f, Pal.PAPER)
+            }
+            Meta.HIJA -> {
+                col(Pal.SHADOW); shapes.ellipse(x - 5f, y - 3f, 10f, 4f)
+                outlined(x - 5f, y - 1f, 10f, 12f, Pal.RAZ_WALL_TOP)
+                outlined(x - 4f, y + 11f, 8f, 7f, Pal.SKIN)
+                col(Pal.CORAL_RED); shapes.rect(x - 4f, y + 15f, 8f, 3f); shapes.rect(x - 5f, y + 11f, 1f, 5f)
+                col(Pal.OUTLINE); shapes.rect(x - 2f, y + 13f, 1f, 1f); shapes.rect(x + 1f, y + 13f, 1f, 1f)
+                // Un farol apagado en la mano.
+                outlined(x + 5f, y + 2f, 3f, 4f, Pal.SEAM)
+            }
+            else -> drawAmparo(x, y, t)
         }
     }
 
@@ -1152,11 +1286,18 @@ class Renderer : Disposable {
         shapes.ellipse(x - 6f, y - 4f, 12f, 5f)
         val blink = p.hurtIframes > 0f && (w.time * 15f).toInt() % 2 == 0
         if (!blink && !w.gameOver) {
-            val body = if (p.dashT > 0f) Pal.LAMP_HI else Pal.COAT
+            // Bruno, el campanero: hábito violeta, calva y una campanita al cuello.
+            val bruno = Meta.hero == "campanero" && Meta.campaneroPlayable && (!w.inSanctuary || true)
+            val body = if (p.dashT > 0f) Pal.LAMP_HI else if (bruno) Pal.VIOLET else Pal.COAT
             outlined(x - 5f, y - 3f, 10f, 12f, body)
             outlined(x - 4f, y + 9f, 8f, 7f, Pal.SKIN)
-            col(Pal.HAIR)
-            shapes.rect(x - 4f, y + 13f, 8f, 3f)
+            if (bruno) {
+                col(Pal.LILAC); shapes.rect(x - 4f, y + 9f, 8f, 1f)
+                col(Pal.STONE); shapes.rect(x - 1f, y + 5f, 2f, 2f)
+            } else {
+                col(Pal.HAIR)
+                shapes.rect(x - 4f, y + 13f, 8f, 3f)
+            }
             col(Pal.OUTLINE)
             if (p.aimX >= 0f) shapes.rect(x + 1f, y + 11f, 1f, 1f) else shapes.rect(x - 2f, y + 11f, 1f, 1f)
         }
@@ -1226,13 +1367,14 @@ class Renderer : Disposable {
     private fun drawEnemy(w: World, e: Enemy, a: Float) {
         val x = e.ix(a).roundToInt().toFloat()
         val y = e.iy(a).roundToInt().toFloat()
-        val flash = e.flash > 0f
+        // Destellos suaves: sin parpadeo blanco al golpear.
+        val flash = e.flash > 0f && !Settings.softFlashes
         val tele = e.state == EState.TELEGRAPH
         val blink = (w.time * 16f).toInt() % 2 == 0
 
         // Solo existe lo que iluminas: fuera de tu luz no se dibuja (el Tachado deja ver su barra).
         if (e.hidden) {
-            if (e.affix == Affix.TACHADO && e.hp < e.maxHp) {
+            if (e.has(Affix.TACHADO) && e.hp < e.maxHp) {
                 col(Pal.OUTLINE); shapes.rect(x - 8f, y + e.hh + 5f, 16f, 3f)
                 col(Pal.TACHADO); shapes.rect(x - 7f, y + e.hh + 6f, 14f * (e.hp / e.maxHp), 1f)
             }
@@ -1242,6 +1384,8 @@ class Renderer : Disposable {
         if (e is Obispo) { drawObispo(w, e, x, y, flash, blink); return }
         if (e is Cartografo) { drawCartografo(w, e, x, y, flash, blink); return }
         if (e is LamparaMadre) { drawLampara(w, e, x, y, flash, blink); return }
+        if (e is FareroAntiguo) { drawFarero(e, x, y, flash, blink); return }
+        if (e is Criatura) { drawCriatura(e, x, y, flash, blink); return }
         if (e is Anguila && e.phase != Anguila.Phase.EXPOSED) {
             // Bajo el suelo: solo una onda en la tierra.
             col(Pal.ROOT, 0.5f)
@@ -1258,6 +1402,10 @@ class Renderer : Disposable {
             val grow = if (affix == Affix.HAMBRE) 2f * (w.player.luz / 20f).toInt() else 0f
             col(affix.color, if (blink) 0.9f else 0.55f)
             shapes.rect(x - e.hw - 3f - grow, y - e.hh - 3f - grow, e.hw * 2f + 6f + grow * 2f, e.hh * 2f + 6f + grow * 2f)
+            e.affix2?.let { a2 ->
+                col(a2.color, if (blink) 0.55f else 0.9f)
+                shapes.rect(x - e.hw - 5f - grow, y - e.hh - 5f - grow, e.hw * 2f + 10f + grow * 2f, 2f)
+            }
         }
 
         when (e) {
@@ -1561,6 +1709,34 @@ class Renderer : Disposable {
     }
 
     /** La Lámpara Madre: jaula de cristal con la llama; desde la fase 2 se abre y se ve un ojo. */
+    /** El Farero Antiguo: viejo alto con capote, bastón y farol. */
+    private fun drawFarero(f: FareroAntiguo, x: Float, y: Float, flash: Boolean, blink: Boolean) {
+        col(Pal.SHADOW)
+        shapes.ellipse(x - 9f, y - 12f, 18f, 5f)
+        val coat = if (flash) Color.WHITE else if (f.act == FareroAntiguo.Act.EXPOSED && blink) Pal.CORAL else Pal.STONE
+        outlined(x - 7f, y - 10f, 14f, 16f, coat)
+        outlined(x - 5f, y + 6f, 10f, 8f, Pal.BONE)
+        col(Pal.OUTLINE); shapes.rect(x - 3f, y + 9f, 2f, 2f); shapes.rect(x + 1f, y + 9f, 2f, 2f)
+        outlined(x - 6f, y + 13f, 12f, 3f, Pal.SEAM)
+        // Bastón
+        col(Pal.OUTLINE); shapes.rect(x - 11f, y - 10f, 2f, 22f)
+        // Farol
+        val lx = x + cos(f.lanternA) * 10f
+        val ly = y + sin(f.lanternA) * 10f
+        outlined(lx - 3f, ly - 3f, 6f, 6f, if (f.lanternOn) Pal.LAMP_HI else Pal.SEAM)
+        if (f.state == EState.TELEGRAPH && blink) { col(Pal.CORAL); shapes.rect(x - 1f, y + 18f, 2f, 4f) }
+    }
+
+    /** La criatura de la fosa: solo se ve su respiración luminosa y las fauces cuando está expuesta. */
+    private fun drawCriatura(c: Criatura, x: Float, y: Float, flash: Boolean, blink: Boolean) {
+        col(Pal.RAZ_VOID, 0.9f)
+        shapes.ellipse(x - 14f, y - 11f, 28f, 22f)
+        col(if (flash) Color.WHITE else Pal.MOLTEN, 0.4f + 0.5f * c.breath)
+        shapes.ellipse(x - 5f, y - 3f, 10f, 6f)
+        if (c.exposed) { col(Pal.CORAL); shapes.rect(x - 8f, y - 7f, 16f, 2f) }
+        if (c.state == EState.TELEGRAPH && blink) { col(Pal.CORAL); shapes.ellipse(x - 3f, y - 2f, 6f, 4f) }
+    }
+
     private fun drawLampara(w: World, l: LamparaMadre, x: Float, y: Float, flash: Boolean, blink: Boolean) {
         col(Pal.SHADOW)
         shapes.ellipse(x - 20f, y - 22f, 40f, 8f)
@@ -1982,7 +2158,8 @@ class Renderer : Disposable {
             text("ARMA: ${p.weapon.label.uppercase()}", iw - 8f, ih - 7f, Pal.CREAM, align = 1)
         } else {
             text("LUZ ${p.luz.roundToInt()}/${p.luzMax.roundToInt()}", 8f + p.luzMax + 6f, ih - 7f, Pal.LAMP_HI)
-            text("PISO ${w.floorNum}   BAJAS ${w.kills}   ${p.weapon.label.uppercase()}", iw - 8f, ih - 7f, Pal.CREAM, align = 1)
+            val mtag = if (w.baja) "   M. BAJA" else if (w.marea > 0) "   M${w.marea}" else ""
+            text("PISO ${w.floorNum}   BAJAS ${w.kills}   ${p.weapon.label.uppercase()}$mtag", iw - 8f, ih - 7f, Pal.CREAM, align = 1)
             if (w.test) text("MODO PRUEBA", iw - 8f, 196f, Pal.CORAL, align = 1)
         }
         for (f in w.fx.floaters) {
@@ -2034,17 +2211,18 @@ class Renderer : Disposable {
                     text("Piso ${d.floor}  ·  sala ${d.roomType}  ·  entraste con ${d.entryLuz} de Luz", iw / 2f, 152f, Pal.CREAM, align = 0)
                     text((if (d.enemiesLeft == 1) "Quedaba 1 enemigo" else "Quedaban ${d.enemiesLeft} enemigos") + "  ·  ${mm}:${ss.toString().padStart(2, '0')}  ·  ${w.kills} bajas  ·  ${w.owned.size} exvotos", iw / 2f, 136f, Pal.CREAM, align = 0)
                     text("Perlas de esta run: ${w.perlasRun}   (total ${Meta.perlas})", iw / 2f, 114f, Pal.SHELL, align = 0)
+                    text("${Mareas.label(w.marea, w.baja)}  ·  semilla ${w.seedCode}", iw / 2f, 100f, Pal.TIDE, align = 0)
                 }
                 if (w.modeT > 1.8f) text(anyKeyText(c, "volver al Santuario"), iw / 2f, 88f, Pal.LAMP_HI, align = 0)
             }
             World.Mode.VICTORY -> {
                 val mm = (w.time / 60f).toInt()
                 val ss = (w.time % 60f).toInt()
-                val ending = if (w.biome == Biome.RAIZ) (if (Meta.allBottles) Story.FINAL_B else Story.FINAL_A) else null
+                val ending = if (w.biome == Biome.RAIZ) (if (w.finalC) Story.FINAL_C else if (Meta.allBottles) Story.FINAL_B else Story.FINAL_A) else null
                 text(ending?.first ?: "${w.biome.label} COMPLETADA", iw / 2f, ih * 0.80f, Pal.LAMP, align = 0)
                 ending?.let { text(it.second, iw / 2f, ih * 0.72f, Pal.CREAM, align = 0, wrap = iw * 0.8f) }
                 text("Tiempo ${mm}:${ss.toString().padStart(2, '0')}  ·  ${w.kills} bajas  ·  ${w.owned.size} exvotos", iw / 2f, ih * 0.52f, Pal.CREAM, align = 0)
-                text("Perlas +${w.perlasRun}   (total ${Meta.perlas})", iw / 2f, ih * 0.45f, Pal.SHELL, align = 0)
+                text("Perlas +${w.perlasRun}   (total ${Meta.perlas})   ·   ${Mareas.label(w.marea, w.baja)}   ·   semilla ${w.seedCode}", iw / 2f, ih * 0.45f, Pal.SHELL, align = 0)
                 text(if (Meta.allBottles) Story.VICTORIA_FINAL else Story.VICTORIA_FINAL + "  Botellas: ${Meta.bottles.size}/${Bottles.all.size}", iw / 2f, ih * 0.37f, Pal.CREAM, align = 0, wrap = iw * 0.85f)
                 if (w.modeT > 1.8f) text(anyKeyText(c, "volver al Santuario"), iw / 2f, ih * 0.25f, Pal.LAMP_HI, align = 0)
             }
