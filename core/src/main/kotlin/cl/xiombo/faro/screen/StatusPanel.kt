@@ -154,7 +154,7 @@ class StatusPanel {
         val dmg = (baseDmg * st.weaponMul + st.flatDmg) * st.dmgMul
         out += Row("Daño por golpe", f(dmg), "base ${f(baseDmg)}", tone(dmg, baseDmg))
         when (wp) {
-            Weapon.FAROL -> out += Row("Combo", "3 golpes; el 3.º quema", "")
+            Weapon.FAROL -> out += Row("Combo", "3 golpes; el tercero quema", "")
             Weapon.ARPON -> {
                 out += Row("Perforación", "${2 + w.weaponLevel} enemigos", "base 2", tone(2f + w.weaponLevel, 2f))
                 out += Row("Vuelta", "${f(1.5f - 0.3f * w.weaponLevel)} s", "base 1,5 s", tone(1.5f - 0.3f * w.weaponLevel, 1.5f, false))
@@ -181,6 +181,7 @@ class StatusPanel {
         out += Row("MOVIMIENTO", header = true)
         val spd = Balance.SPEED * st.speedBonus * p.heroSpeed
         out += Row("Velocidad", "${spd.roundToInt()} px/s", "base ${Balance.SPEED.toInt()}", tone(spd, Balance.SPEED))
+        if (st.windSpeed != 1f) out += Row("Sin atacar", "${(spd * st.windSpeed).roundToInt()} px/s", "Rosa de los vientos", 1)
         out += Row("Cargas de Destello", "${st.dashCharges}", "base 1", tone(st.dashCharges.toFloat(), 1f))
         val rech = Balance.DASH_COOLDOWN * st.dashRechargeMul
         out += Row("Recarga del Destello", "${f(rech)} s", "base ${f(Balance.DASH_COOLDOWN)} s", tone(rech, Balance.DASH_COOLDOWN, false))

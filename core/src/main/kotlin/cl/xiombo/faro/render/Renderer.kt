@@ -2256,7 +2256,7 @@ class Renderer : Disposable {
             text("PISO ${w.floorNum}   BAJAS ${w.kills}   ${p.weapon.label.uppercase()}$mtag", iw - 8f, ih - 7f, Pal.CREAM, align = 1)
             if (w.test) text("MODO PRUEBA", iw - 8f, 196f, Pal.CORAL, align = 1)
             // Recordatorio al empezar la run (en táctil se ve el botón "i").
-            if (!c.showTouchUi && w.time < 20f && w.mode == World.Mode.PLAYING) text("${statusKey(c)}: ESTADO", 8f, ih - 22f, Pal.LAMP_DIM)
+            if (!c.showTouchUi && w.time < 20f && w.mode == World.Mode.PLAYING) text("${statusKey(c)}: ESTADO", 8f, 10f, Pal.LAMP_DIM)
         }
         for (f in w.fx.floaters) {
             text(f.text, f.x - camLeft, f.y - camBottom, f.color, alpha = (f.t / 0.9f).coerceIn(0f, 1f), align = 0)
