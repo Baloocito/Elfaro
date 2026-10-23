@@ -170,9 +170,16 @@ F0 (prototipo de sensación) está completa: movimiento, Destello, Farol, Haz, l
 | Haz      | Clic der. / K / Q      | Botón HAZ                      | LT / B                      |
 | Usar / comprar | E / Enter        | Botón USAR (aparece cerca)     | Y                           |
 | Velar (mantener) | C / Ctrl izq.  | Botón VELAR                    | LB                          |
-| Pausa    | Esc / P                | Botón II o atrás               | Start / Select              |
+| Pausa    | Esc / P                | Botón II o atrás               | Start                       |
+| Estado   | Tab / I                | Botón i (junto a la pausa)     | Select                      |
 | Debug    | F1 cajas y FPS · F2 luz on/off | —                      | —                           |
 | Con F1   | F3 carta y Luz llena · F4 ir al jefe · F5 exvoto (en el Santuario: +50 Perlas y todas las armas) · F6 150 de daño · F8 Isla recibe 40 · F9 salta a la siguiente sala (grandes, antesala y capilla primero) · F11 Catedral / Muelle · F10 exvotos de Velar · F7 mando virtual (teclas 1–0) | — | — |
+
+**Estado** es un menú propio, aparte de la pausa, que detiene el juego y tiene tres pestañas:
+- **Isla**: tu Luz, radio, daño, velocidad, Destello, Haz, Quemadura y Velar, cada uno con su valor
+  de base al lado (verde si mejoró, rojo si empeoró), y los bonos que dependen del objetivo.
+- **Exvotos**: los que llevas con su efecto y cómo vas en cada conjunto.
+- **Santuario**: Perlas, armas, lotes, náufragos, jefes vencidos, botellas, finales y Marea máxima.
 
 **Mando:** se conecta por Bluetooth en los ajustes del teléfono y el juego lo detecta solo.
 Al usarlo se ocultan los controles táctiles, y vuelven a aparecer al tocar la pantalla.
@@ -184,7 +191,7 @@ acción y encendido mientras lo pulsas, y una tabla de acciones con dos huecos c
 - **X** quita un botón, **Y** vuelve a la distribución por defecto y **B** guarda y sale.
 - Reglas: máximo 2 botones por acción, y un botón solo puede tener una acción. Si asignas uno
   que ya está en uso, los huecos se intercambian. Ninguna acción puede quedarse sin botón.
-- Start, Select y la cruceta están reservados (pausa y movimiento), así nunca te quedas sin ellos.
+- Start, Select y la cruceta están reservados (pausa, Estado y movimiento), así nunca te quedas sin ellos.
 
 Por defecto: Farol RT + X · Destello A + RB · Haz LT + B · Usar Y (LB libre).
 
