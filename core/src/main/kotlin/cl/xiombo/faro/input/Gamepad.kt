@@ -29,6 +29,9 @@ class Gamepad {
     // Navegación de menús
     var startPressed = false
         private set
+    /** Select / Back: abre la pantalla de Estado. */
+    var selectPressed = false
+        private set
     var confirm = false
         private set
     var back = false
@@ -49,6 +52,7 @@ class Gamepad {
         private set
 
     private var prevStart = false
+    private var prevSelect = false
     private var prevA = false
     private var prevB = false
     private var navLatch = 0
@@ -74,7 +78,7 @@ class Gamepad {
     fun poll() {
         val c = current()
         controller = c
-        startPressed = false; confirm = false; back = false; navUp = false; navDown = false; anyInput = false
+        startPressed = false; selectPressed = false; confirm = false; back = false; navUp = false; navDown = false; anyInput = false
         navLeft = false; navRight = false; xPressed = false; yPressed = false
         pressed.fill(false)
         if (c == null || !c.isConnected) {
@@ -99,9 +103,12 @@ class Gamepad {
             held[a.ordinal] = h
         }
 
-        val st = button(c, m.buttonStart) || button(c, m.buttonBack)
+        val st = button(c, m.buttonStart)
         startPressed = st && !prevStart
         prevStart = st
+        val sl = button(c, m.buttonBack)
+        selectPressed = sl && !prevSelect
+        prevSelect = sl
         val a = button(c, m.buttonA)
         confirm = a && !prevA
         prevA = a
@@ -126,7 +133,7 @@ class Gamepad {
             abs(ly) < 0.3f -> navLatch = 0
         }
 
-        anyInput = pressed.any { it } || startPressed || confirm || back || len(lx, ly) > 0.3f || len(rx, ry) > 0.3f
+        anyInput = pressed.any { it } || startPressed || selectPressed || confirm || back || len(lx, ly) > 0.3f || len(rx, ry) > 0.3f
     }
 
     /** Zona muerta radial con reescalado: sin deriva y sin perder recorrido. */
@@ -169,7 +176,7 @@ class Gamepad {
             if (i in capturedButtons) continue
             capturedButtons += i
             if (i == m.buttonStart) continue   // Start cancela (lo gestiona el menú)
-            if (i == m.buttonBack) return "!Select está reservado para la pausa"
+            if (i == m.buttonBack) return "!Select está reservado para el Estado"
             if (i in dpad) return "!La cruceta está reservada para mover a Isla"
             return "b$i"
         }

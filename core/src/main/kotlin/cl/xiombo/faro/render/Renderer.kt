@@ -37,6 +37,7 @@ import cl.xiombo.faro.input.Bindings
 import cl.xiombo.faro.input.Controls
 import cl.xiombo.faro.input.Gamepad
 import cl.xiombo.faro.screen.PauseMenu
+import cl.xiombo.faro.screen.StatusPanel
 import cl.xiombo.faro.world.Affix
 import cl.xiombo.faro.world.Ahogado
 import cl.xiombo.faro.world.Body
@@ -209,8 +210,9 @@ class Renderer : Disposable {
     private var menu: PauseMenu? = null
     private var pad: Gamepad? = null
 
-    fun render(w: World, alpha: Float, controls: Controls, menu: PauseMenu, pad: Gamepad) {
+    fun render(w: World, alpha: Float, controls: Controls, menu: PauseMenu, pad: Gamepad, status: StatusPanel) {
         this.menu = menu
+        this.status = status
         this.pad = pad
         updateLayout()
         placeCamera(w, alpha)
@@ -220,6 +222,97 @@ class Renderer : Disposable {
         drawHud(w)
         drawScreenSpace(w, controls)
         if (menu.open) drawMenu(menu, pad, controls)
+        else if (status.open) drawStatus(status, pad, controls)
+    }
+
+    private var status: StatusPanel? = null
+
+    /** Tecla o botón que abre el Estado, según el dispositivo. */
+    private fun statusKey(c: Controls) = when {
+        c.padActive -> "Select"
+        c.touch -> "i"
+        else -> "Tab"
+    }
+
+    /** Pantalla de Estado (ver [StatusPanel]): pestañas, filas con valor y base, y desplazamiento. */
+    private fun drawStatus(s: StatusPanel, pad: Gamepad, c: Controls) {
+        val bw = Gdx.graphics.backBufferWidth
+        val bh = Gdx.graphics.backBufferHeight
+        Gdx.gl.glViewport(ox, oy, iw * scale, ih * scale)
+        Gdx.gl.glEnable(GL20.GL_BLEND)
+        shapes.projectionMatrix = internalProj
+        shapes.begin(ShapeType.Filled)
+        col(Pal.OUTLINE, 0.86f)
+        shapes.rect(0f, 0f, iw.toFloat(), ih.toFloat())
+        // Marco del cuaderno
+        col(Pal.NIGHT, 0.92f)
+        shapes.rect(StatusPanel.PANEL_X, 26f, StatusPanel.PANEL_W, 236f)
+        col(Pal.LAMP_DIM)
+        shapes.rect(StatusPanel.PANEL_X, 261f, StatusPanel.PANEL_W, 1f)
+        shapes.rect(StatusPanel.PANEL_X, 26f, StatusPanel.PANEL_W, 1f)
+        // Pestañas
+        StatusPanel.Tab.entries.forEachIndexed { i, t ->
+            val x = StatusPanel.tabX(i) - StatusPanel.TAB_W / 2f
+            val on = t == s.tab
+            col(if (on) Pal.LAMP else Pal.SEAM, if (on) 0.95f else 0.8f)
+            shapes.rect(x, StatusPanel.TAB_Y - 7f, StatusPanel.TAB_W, 15f)
+        }
+        col(Pal.LAMP_DIM, 0.7f)
+        shapes.rect(StatusPanel.PANEL_X + 8f, StatusPanel.TAB_Y - 10f, StatusPanel.PANEL_W - 16f, 1f)
+        // Bandas de sección
+        val first = s.scroll
+        val last = minOf(s.rows.size, first + StatusPanel.VISIBLE)
+        for (i in first until last) {
+            val r = s.rows[i]
+            if (!r.header) continue
+            val y = StatusPanel.LIST_TOP - (i - first) * StatusPanel.ROW_H
+            col(Pal.SEAM, 0.75f)
+            shapes.rect(StatusPanel.PANEL_X + 8f, y - 8f, StatusPanel.PANEL_W - 16f, StatusPanel.ROW_H - 1f)
+        }
+        // Barra de desplazamiento
+        if (s.maxScroll > 0) {
+            val top = StatusPanel.LIST_TOP
+            val h = StatusPanel.VISIBLE * StatusPanel.ROW_H
+            col(Pal.SEAM, 0.8f)
+            shapes.rect(StatusPanel.PANEL_X + StatusPanel.PANEL_W - 7f, top - h, 2f, h)
+            val k = StatusPanel.VISIBLE.toFloat() / s.rows.size
+            val off = s.scroll.toFloat() / s.rows.size
+            col(Pal.LAMP_DIM)
+            shapes.rect(StatusPanel.PANEL_X + StatusPanel.PANEL_W - 7f, top - h * (off + k), 2f, h * k)
+        }
+        shapes.end()
+
+        Gdx.gl.glViewport(0, 0, bw, bh)
+        batch.projectionMatrix = screenProj
+        batch.begin()
+        text("ESTADO", iw / 2f, 250f, Pal.LAMP, align = 0)
+        text("X", StatusPanel.CLOSE_X, StatusPanel.CLOSE_Y, Pal.CREAM, align = 0)
+        StatusPanel.Tab.entries.forEachIndexed { i, t ->
+            text(t.label, StatusPanel.tabX(i), StatusPanel.TAB_Y + 3f, if (t == s.tab) Pal.OUTLINE else Pal.CREAM, align = 0)
+        }
+        for (i in first until last) {
+            val r = s.rows[i]
+            val y = StatusPanel.LIST_TOP - (i - first) * StatusPanel.ROW_H
+            if (r.header) {
+                text(r.label, StatusPanel.COL_LABEL - 6f, y, Pal.LAMP_HI)
+                if (r.value.isNotEmpty()) text(r.value, StatusPanel.PANEL_X + StatusPanel.PANEL_W - 14f, y, Pal.SHELL, align = 1)
+                continue
+            }
+            text(r.label, StatusPanel.COL_LABEL, y, r.color ?: Pal.CREAM)
+            if (r.value.isNotEmpty()) {
+                val vc = when (r.tone) { 1 -> Pal.GREEN_LAMP; -1 -> Pal.CORAL; else -> Pal.CREAM }
+                text(r.value, StatusPanel.COL_VALUE, y, vc)
+            }
+            if (r.base.isNotEmpty()) text(r.base, StatusPanel.COL_BASE, y, Pal.SHELL)
+        }
+        val hint = when {
+            c.padActive || pad.controller != null -> "Izquierda/derecha: pestaña  ·  arriba/abajo: desplazar  ·  B o Select: cerrar"
+            c.touch -> "Toca una pestaña  ·  toca arriba o abajo para desplazar  ·  X para cerrar"
+            else -> "Izquierda/derecha: pestaña  ·  arriba/abajo: desplazar  ·  Tab o Esc: cerrar"
+        }
+        text(hint, iw / 2f, 14f, Pal.SHELL, align = 0)
+        batch.end()
+        font.color = Color.WHITE
     }
 
     /** Nombre del botón para una acción según el dispositivo con el que se juega. */
@@ -2156,11 +2249,14 @@ class Renderer : Disposable {
         if (w.inSanctuary) {
             text("PERLAS ${Meta.perlas}", 8f, ih - 7f, Pal.SHELL)
             text("ARMA: ${p.weapon.label.uppercase()}", iw - 8f, ih - 7f, Pal.CREAM, align = 1)
+            if (!c.showTouchUi) text("${statusKey(c)}: ESTADO", 8f, ih - 17f, Pal.LAMP_DIM)
         } else {
             text("LUZ ${p.luz.roundToInt()}/${p.luzMax.roundToInt()}", 8f + p.luzMax + 6f, ih - 7f, Pal.LAMP_HI)
             val mtag = if (w.baja) "   M. BAJA" else if (w.marea > 0) "   M${w.marea}" else ""
             text("PISO ${w.floorNum}   BAJAS ${w.kills}   ${p.weapon.label.uppercase()}$mtag", iw - 8f, ih - 7f, Pal.CREAM, align = 1)
             if (w.test) text("MODO PRUEBA", iw - 8f, 196f, Pal.CORAL, align = 1)
+            // Recordatorio al empezar la run (en táctil se ve el botón "i").
+            if (!c.showTouchUi && w.time < 20f && w.mode == World.Mode.PLAYING) text("${statusKey(c)}: ESTADO", 8f, 10f, Pal.LAMP_DIM)
         }
         for (f in w.fx.floaters) {
             text(f.text, f.x - camLeft, f.y - camBottom, f.color, alpha = (f.t / 0.9f).coerceIn(0f, 1f), align = 0)
@@ -2233,6 +2329,10 @@ class Renderer : Disposable {
             glyphs.setText(font, pb.label)
             font.color = Pal.CREAM
             font.draw(batch, pb.label, pb.x - glyphs.width / 2f, pb.y + glyphs.height / 2f)
+            val sb = c.statusButton()
+            glyphs.setText(font, sb.label)
+            font.color = Pal.LAMP_HI
+            font.draw(batch, sb.label, sb.x - glyphs.width / 2f, sb.y + glyphs.height / 2f)
             val btns = c.buttons()
             for (i in btns.indices) {
                 if (i == 3 && !c.useVisible) continue
@@ -2292,6 +2392,10 @@ class Renderer : Disposable {
         val pb = c.pauseButton()
         col(Pal.CREAM, 0.18f)
         shapes.circle(pb.x, pb.y, pb.r, 30)
+        // El Estado tiene su propio botón, con el color del farol para que se note.
+        val sb = c.statusButton()
+        col(Pal.LAMP, 0.30f)
+        shapes.circle(sb.x, sb.y, sb.r, 30)
         val jr = c.joyRadius
         if (c.joyPtr != -1) {
             col(Pal.CREAM, 0.12f)

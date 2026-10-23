@@ -22,6 +22,7 @@ class RunScreen : KtxScreen {
     private val controls = Controls(renderer)
     private val pad = Gamepad()
     private val menu = PauseMenu()
+    private val status = StatusPanel()
     /** El juego abre en el menú principal, con el Santuario de fondo. */
     private var world = World.sanctuary()
     private var lastHurt = 0
@@ -56,11 +57,14 @@ class RunScreen : KtxScreen {
             pad.virtual = if (pad.virtual == null) VirtualController() else null
         }
         pad.poll()
-        controls.menuOpen = menu.open
+        controls.menuOpen = menu.open || status.open
         menu.inRun = !world.inSanctuary && world.mode == World.Mode.PLAYING
         menu.seedCode = if (world.inSanctuary) "" else world.seedCode
 
-        if (menu.open) {
+        if (status.open && !menu.open) {
+            status.update(pad, controls)
+            acc = 0f
+        } else if (menu.open) {
             menu.update(pad, controls)
             if (menu.abandonRequested) {
                 menu.abandonRequested = false
@@ -72,6 +76,9 @@ class RunScreen : KtxScreen {
             controls.applyPadButtons(pad)
             if (controls.menuInput.pause) {
                 menu.openMenu()
+                acc = 0f
+            } else if (controls.menuInput.status && world.mode == World.Mode.PLAYING) {
+                status.openFor(world)
                 acc = 0f
             } else {
                 acc += min(delta, 0.25f)              // evita la espiral de la muerte
@@ -101,7 +108,7 @@ class RunScreen : KtxScreen {
         Audio.update(delta)
 
         controls.useVisible = world.interactable != null
-        renderer.render(world, acc / step, controls, menu, pad)
+        renderer.render(world, acc / step, controls, menu, pad, status)
     }
 
     private fun trackFor(w: World): String = when {

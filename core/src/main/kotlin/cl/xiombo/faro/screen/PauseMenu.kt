@@ -13,12 +13,13 @@ import com.badlogic.gdx.Gdx
  * Menú del juego con tres páginas:
  * - Principal (al abrir el juego): Continuar descenso, Jugar, Niveles de prueba, Configurar mando.
  * - Niveles de prueba: entra directo a cada bioma, a cada jefe o a la celda de Amparo.
- * - Pausa: Start/Select en el mando, Esc o P en teclado, atrás o el botón II en Android.
+ * - Pausa: Start en el mando, Esc o P en teclado, atrás o el botón II en Android.
+ *   (Select, Tab o I y el botón "i" abren la pantalla de Estado, ver [StatusPanel].)
  *
  * "Configurar mando" abre una pantalla con el mando dibujado y una tabla de 4 acciones × 2 huecos.
  * Reglas (las hace cumplir [Layout]): máximo 2 botones por acción, un botón solo puede tener
  * una acción (si ya está en uso, se intercambia) y ninguna acción se queda sin botón.
- * Start, Select y la cruceta están reservados para no dejar al jugador sin pausa ni movimiento.
+ * Start, Select y la cruceta están reservados para no dejar al jugador sin pausa, Estado ni movimiento.
  */
 class PauseMenu {
     enum class Mode { MAIN, CONFIG }

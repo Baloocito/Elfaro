@@ -32,12 +32,14 @@ class Controls(private val renderer: Renderer) : InputAdapter() {
         var right = false
         var clear = false
         var restore = false
+        /** Abrir o cerrar la pantalla de Estado. */
+        var status = false
         var hasTap = false
         var tapX = 0f
         var tapY = 0f
         fun clear() {
             pause = false; up = false; down = false; confirm = false; back = false
-            left = false; right = false; clear = false; restore = false; hasTap = false
+            left = false; right = false; clear = false; restore = false; status = false; hasTap = false
         }
     }
 
@@ -84,7 +86,10 @@ class Controls(private val renderer: Renderer) : InputAdapter() {
     }
 
     /** Botón de pausa táctil, arriba al centro. */
-    fun pauseButton() = Btn(bw / 2f, bh - 0.07f * bh, 0.05f * bh, "II")
+    fun pauseButton() = Btn(bw / 2f + 0.07f * bh, bh - 0.07f * bh, 0.05f * bh, "II")
+
+    /** Botón de Estado táctil, junto a la pausa. */
+    fun statusButton() = Btn(bw / 2f - 0.07f * bh, bh - 0.07f * bh, 0.05f * bh, "i")
 
     fun isPressed(i: Int) = btnPtr[i] != -1
 
@@ -107,6 +112,7 @@ class Controls(private val renderer: Renderer) : InputAdapter() {
                 Input.Keys.RIGHT, Input.Keys.D -> menuInput.right = true
                 Input.Keys.FORWARD_DEL, Input.Keys.DEL, Input.Keys.X -> menuInput.clear = true
                 Input.Keys.R -> menuInput.restore = true
+                Input.Keys.TAB, Input.Keys.I -> menuInput.status = true
                 Input.Keys.ESCAPE, Input.Keys.BACK, Input.Keys.P -> menuInput.back = true
             }
             return true
@@ -119,6 +125,7 @@ class Controls(private val renderer: Renderer) : InputAdapter() {
             Input.Keys.K, Input.Keys.Q -> press(2)
             Input.Keys.E, Input.Keys.ENTER -> press(3)
             Input.Keys.ESCAPE, Input.Keys.P, Input.Keys.BACK -> menuInput.pause = true
+            Input.Keys.TAB, Input.Keys.I -> menuInput.status = true
             Input.Keys.F1 -> renderer.debug = !renderer.debug
             Input.Keys.F2 -> renderer.lighting = !renderer.lighting
             Input.Keys.F7 -> if (renderer.debug) toggleVirtualPad = true
@@ -156,6 +163,11 @@ class Controls(private val renderer: Renderer) : InputAdapter() {
         val pr = pb.r * 1.4f
         if ((x - pb.x) * (x - pb.x) + (y - pb.y) * (y - pb.y) <= pr * pr) {
             menuInput.pause = true
+            return true
+        }
+        val sb = statusButton()
+        if ((x - sb.x) * (x - sb.x) + (y - sb.y) * (y - sb.y) <= pr * pr) {
+            menuInput.status = true
             return true
         }
         val btns = buttons()
@@ -205,6 +217,7 @@ class Controls(private val renderer: Renderer) : InputAdapter() {
         if (pad.pressed[Action.USE.ordinal]) press(3)
         if (pad.pressed.any { it } || pad.confirm) state.anyPressed = true
         if (pad.startPressed) menuInput.pause = true
+        if (pad.selectPressed) menuInput.status = true
     }
 
     /** Se llama una vez por tick de lógica, antes de World.update. */

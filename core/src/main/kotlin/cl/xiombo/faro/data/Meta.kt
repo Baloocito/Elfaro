@@ -16,7 +16,7 @@ enum class Weapon(
     val upgradeText: String,
 ) {
     FAROL("Farol", 4, 3, 8, 0.45f,
-        "Rápido. Combo de 3 golpes; el 3.º quema.", "+20 % de daño"),
+        "Rápido. Combo de 3 golpes; el tercero quema.", "+20 % de daño"),
     ARPON("Arpón", 8, 2, 14, 0.35f,
         "A distancia: 14 de daño y perfora 2. Recógelo o espera a que vuelva.", "+1 perforación y vuelve 0,3 s antes"),
     ANCLA("Ancla", 15, 4, 18, 0.25f,

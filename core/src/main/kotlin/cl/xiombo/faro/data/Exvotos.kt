@@ -72,7 +72,7 @@ object Exvotos {
         ExvotoDef("brujula_muerta", "Brújula muerta", Tag.NINGUNA, Rarity.COMUN, "Los orbes dan un 15 % más de Luz.", 4),
         ExvotoDef("pez_linterna", "Pez linterna", Tag.NINGUNA, Rarity.RARO, "Cada enemigo suelta un orbe de Luz más.", 4),
         ExvotoDef("calavera_cera", "Calavera de cera", Tag.HUESO, Rarity.COMUN, "+20 % de daño contra enemigos con menos del 25 % de vida.", 4),
-        ExvotoDef("campanilla", "Campanilla", Tag.SAL, Rarity.RARO, "Cada 5.º golpe aturde 0,5 s.", 4),
+        ExvotoDef("campanilla", "Campanilla", Tag.SAL, Rarity.RARO, "Cada quinto golpe aturde 0,5 s.", 4),
         ExvotoDef("corriente", "Corriente", Tag.MAREA, Rarity.COMUN, "El Destello se recarga un 25 % más rápido.", 4),
         ExvotoDef("fuelle", "Fuelle", Tag.FUEGO, Rarity.EPICO, "El 3.er golpe del combo estalla en fuego (32 px, 8 de daño y Quemadura).", 4),
         // Lote 5
