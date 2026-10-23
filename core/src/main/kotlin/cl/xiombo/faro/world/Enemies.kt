@@ -58,6 +58,8 @@ fun createEnemy(id: String, x: Float, y: Float, floor: Int, affix: Affix? = null
         "vidriero" -> Vidriero(def, x, y, floor, affix)
         "ojo" -> OjoFosa(def, x, y, floor, affix)
         "lampara" -> LamparaMadre(def, x, y)
+        "farero" -> FareroAntiguo(def, x, y)
+        "criatura" -> Criatura(def, x, y)
         else -> error("Enemigo desconocido: $id")
     }
 }
@@ -459,6 +461,8 @@ class Sirena(def: EnemyDef, x: Float, y: Float) : Enemy(def, x, y, 1, null) {
     var bubbleY = 0f
         private set
     private var spiralA = 0f
+    /** Marea 5: corona de notas lentas cada 6 s. */
+    private var crownT = 6f
     private var emitT = 0f
     private var dives = 0
     private var pattern = 0
@@ -486,6 +490,16 @@ class Sirena(def: EnemyDef, x: Float, y: Float) : Enemy(def, x, y, 1, null) {
             phase = 3; dives = 0; setAct(Act.ROAR, 1.2f); w.onBossPhase(3); return
         }
         val p = w.player
+        if (Balance.marea >= 5 && act != Act.INTRO && act != Act.ROAR && !submerged) {
+            crownT -= dt
+            if (crownT <= 0f) {
+                crownT = 6f
+                for (i in 0 until 10) {
+                    val a = i * MathUtils.PI2 / 10f + spiralA
+                    w.shoot(x, y, cos(a) * 45f, sin(a) * 45f, dmg * 0.8f, "Corona de notas · ${def.name}")
+                }
+            }
+        }
         when (act) {
             Act.INTRO -> if (actT <= 0f) setAct(Act.IDLE, 0.6f)
             Act.IDLE -> {

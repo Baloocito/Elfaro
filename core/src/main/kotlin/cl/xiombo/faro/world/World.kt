@@ -60,6 +60,8 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         const val OBISPO_PERLAS = 12
         const val CARTOGRAFO_PERLAS = 20
         const val LAMPARA_PERLAS = 35
+        const val FARERO_PERLAS = 50
+        const val CRIATURA_PERLAS = 20
         const val ATRIL_LIGHT = 48f
         const val MOLTEN_BURN = 4f         // Luz por segundo sobre vidrio fundido
         const val BEAT_PERIOD = 10f        // latido de la Raíz
@@ -158,6 +160,15 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
     /** Atriles de la sala (x, y). Se apagan en la fase 3 del Cartógrafo. */
     val atriles = ArrayList<FloatArray>()
     var atrilesOn = true
+    /** Final C: se abrió el camino del Farero Antiguo en esta run. */
+    var finalC = false
+        private set
+    /** Pelea a oscuras (Farero o criatura de Marea 10): tu radio no pasa de 80 px. */
+    var darkFight = false
+        private set
+    /** Dónde quedó la lámpara apagada (cáscara), o null. */
+    var husk: FloatArray? = null
+        private set
         private set
     private var shelfT = 0f
     /** Latido de la Raíz: s hasta el próximo; durante [beatBoostT] los enemigos van un 30 % más rápido. */
@@ -440,6 +451,8 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         waves.clear()
         traps.clear(); lines.clear(); ink.clear()
         atrilesOn = true
+        darkFight = false
+        husk = null
         atriles.clear()
         for (t in room.tilesOf(Room.ATRIL)) atriles += room.tileCenter(t[0], t[1])
         shelfT = 0f
@@ -487,7 +500,9 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
             }
             enemies += b
             boss = b
-            showBanner(b.def.name.uppercase(), 2.6f)
+            if (b is LamparaMadre && b.dormant) {
+                showBanner(if (Meta.HIJA in Meta.unlocks) "LA LÁMPARA DUERME  ·  VELA CERCA DE ELLA 3 SEGUNDOS" else "LA LÁMPARA DUERME", 3f)
+            } else showBanner(b.def.name.uppercase(), 2.6f)
         } else if (firstVisit) {
             when (anchor.type) {
                 CellType.SHOP -> showBanner("LA TIENDA DE LA PESCADORA")
@@ -1095,7 +1110,7 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
                 if (!test) {
                     RunSave.clear()
                     if (biome == Biome.RAIZ) {
-                        Meta.endings += if (Meta.allBottles) "B" else "A"
+                        Meta.endings += if (finalC) "C" else if (Meta.allBottles) "B" else "A"
                         // Ganar con la Marea M desbloquea la M+1 (la Marea baja no cuenta).
                         if (!baja) Meta.mareaMax = min(Mareas.MAX, max(Meta.mareaMax, marea + 1))
                         Meta.save()
@@ -1640,9 +1655,31 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         fx.floater("SE DIVIDE", e.x, e.y + 14f, Pal.GEMELO)
     }
 
+    /** Final C (§9): velaste junto a la lámpara dormida. Se apaga sola y baja el Farero. */
+    fun startFinalC(lamp: LamparaMadre) {
+        lamp.killed = true
+        lamp.dead = true
+        husk = floatArrayOf(lamp.x, lamp.y)
+        finalC = true
+        darkFight = true
+        val f = createEnemy("farero", room.width / 2f, room.height - 56f, 1)
+        newEnemies += f
+        boss = f
+        fx.burst(lamp.x, lamp.y, 20, Pal.STONE, 60f, 0.8f)
+        showBanner("LA LÁMPARA NO TE VE. ALGUIEN SÍ.", 3.2f)
+        addShake(3f)
+    }
+
     fun onBossPhase(n: Int) {
         projectiles.clear()
         addShake(5f)
+        if (boss is FareroAntiguo) {
+            when (n) {
+                2 -> showBanner("EL FARERO APAGA SU FAROL  ·  NO DEJES QUE TE ENCUENTRE", 2.6f)
+                3 -> showBanner("LA FOSA RESPIRA  ·  VELA CUANDO TIEMBLE", 2.6f)
+            }
+            return
+        }
         if (boss is Cartografo) {
             when (n) {
                 2 -> showBanner("EL CARTÓGRAFO TE DIBUJA  ·  ROMPE EL CLON", 2.4f)
@@ -1744,7 +1781,22 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         hitstop(10)
         val firstTime = id !in Meta.bosses
         Meta.bosses += id
+        // Marea 10: al apagarse la lámpara, la criatura se suelta.
+        if (id == "lampara" && marea >= 10 && !finalC) {
+            earnPerlas(LAMPARA_PERLAS)
+            if (firstTime) { memory = Story.memoryOf(id); memoryT = MEMORY_TIME }
+            husk = floatArrayOf(b.x, b.y)
+            darkFight = true
+            val c = createEnemy("criatura", room.width / 2f, 48f, 1)
+            newEnemies += c
+            boss = c
+            showBanner("LA LÁMPARA SE APAGA  ·  ALGO SE SUELTA DE ELLA", 3.2f)
+            return
+        }
+        darkFight = false
         val perlas = when (id) {
+            "farero" -> FARERO_PERLAS
+            "criatura" -> CRIATURA_PERLAS
             "obispo" -> OBISPO_PERLAS
             "cartografo" -> CARTOGRAFO_PERLAS
             "lampara" -> LAMPARA_PERLAS
@@ -1764,12 +1816,14 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
                 "sirena" -> if (firstTime) "LA SIRENA SE HUNDE  ·  ARPÓN DESBLOQUEADO" else "LA SIRENA DE BREA SE HUNDE"
                 "obispo" -> if (firstTime) "EL OBISPO CAE  ·  CAMPANA DESBLOQUEADA" else "EL OBISPO CORAL CAE"
                 "cartografo" -> if (firstTime) "EL CARTÓGRAFO SE BORRA  ·  LA CARTÓGRAFA ABRE SU PUESTO" else "EL CARTÓGRAFO SE BORRA"
+                "farero" -> "EL FARERO ANTIGUO DESCANSA"
+                "criatura" -> "LA CRIATURA VUELVE A LA FOSA"
                 else -> "LA LÁMPARA MADRE SE APAGA"
             }, 3.5f,
         )
         atrilesOn = true
         // La run sigue hasta la Raíz; la Lámpara Madre cierra el descenso.
-        cell.pedestals += Pedestal(end[0], end[1], if (id == "lampara") PedKind.FIN else PedKind.ESCALERA)
+        cell.pedestals += Pedestal(end[0], end[1], if (id == "lampara" || id == "farero" || id == "criatura") PedKind.FIN else PedKind.ESCALERA)
         saveRun()
     }
 
@@ -1939,6 +1993,7 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         if (flashT > 0f) r += (if (cl.xiombo.faro.data.Settings.softFlashes) 30f else 90f) * (flashT / FLASH_TIME)
         if (brea) r *= 0.7f
         if (dimT > 0f) r *= 0.6f
+        if (darkFight) r = min(r, 80f)
         if ((boss as? Obispo)?.inColumn(player.cx) == true) r += 30f
         if ((boss as? LamparaMadre)?.inColumn(player.cx) == true) r += 30f
         for (e in enemies) {

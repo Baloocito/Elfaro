@@ -46,7 +46,14 @@ object Story {
             "de frente. Yo no me atreví.",
     )
 
+    val FARERO = Memory(
+        "El Farero Antiguo",
+        "Veinte años a oscuras para que nadie la volviera a encender. Gracias por bajar sin luz, niña. " +
+            "Ahora puedo descansar.",
+    )
+
     fun memoryOf(bossId: String): Memory? = when (bossId) {
+        "farero" -> FARERO
         "sirena" -> SIRENA
         "obispo" -> OBISPO
         "cartografo" -> CARTOGRAFO
@@ -61,6 +68,11 @@ object Story {
     val FINAL_B = "FINAL B  ·  SER LA LÁMPARA" to
         "Isla ha leído todas las botellas y entiende lo que hizo el Farero. Ocupa su lugar dentro de la " +
         "lámpara. Mientras ella arda despacio, la criatura dormirá. La ciudad no sube, pero tampoco se hunde más."
+
+    val FINAL_C = "FINAL C  ·  DEJAR LA OSCURIDAD" to
+        "Isla apaga su farol y mira la fosa de frente. Sin luz que comer, la criatura vuelve a dormir de " +
+        "verdad. El Farero sonríe por primera vez en veinte años. Puerto Velatorio sigue bajo el agua, pero " +
+        "ya nada lo arrastra hacia abajo."
 
     const val LECTURA = "Reto: despeja la sala sin usar el Haz y el atril te dará un exvoto raro."
     const val CORAZON = "Una raíz enorme late en el centro. Si la golpeas, despertará algo."

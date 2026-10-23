@@ -8,6 +8,8 @@ import cl.xiombo.faro.data.Mareas
 import cl.xiombo.faro.data.Settings
 import cl.xiombo.faro.data.RunLog
 import cl.xiombo.faro.world.Anguila
+import cl.xiombo.faro.world.Criatura
+import cl.xiombo.faro.world.FareroAntiguo
 import cl.xiombo.faro.world.Bibliotecario
 import cl.xiombo.faro.world.Campanero
 import cl.xiombo.faro.world.Cartografo
@@ -845,6 +847,39 @@ class Renderer : Disposable {
                 }
             }
         }
+        // Lámpara apagada: una cáscara de vidrio negro.
+        w.husk?.let { hk ->
+            val hx = hk[0]; val hy = hk[1]
+            col(Pal.SHADOW); shapes.ellipse(hx - 20f, hy - 22f, 40f, 8f)
+            outlined(hx - 14f, hy - 22f, 28f, 6f, Pal.STONE)
+            col(Pal.OUTLINE); shapes.rect(hx - 15f, hy - 16f, 30f, 34f)
+            col(Pal.RAZ_VOID); shapes.rect(hx - 14f, hy - 15f, 28f, 32f)
+            for (i in 0 until 4) { col(Pal.SEAM); shapes.rect(hx - 14f + i * 9f, hy - 15f, 2f, 32f) }
+            outlined(hx - 16f, hy + 17f, 32f, 4f, Pal.STONE)
+        }
+        // Farero: cono del farol y aviso de carga.
+        (w.boss as? FareroAntiguo)?.let { f ->
+            if (f.killed) return@let
+            if (f.lanternOn && f.act != FareroAntiguo.Act.INTRO) {
+                val spotted = f.act == FareroAntiguo.Act.SPOTTED
+                col(if (spotted && blink) Pal.CORAL else Pal.LAMP_HI, if (spotted) 0.32f else 0.16f)
+                val steps = 6
+                for (i in 0 until steps) {
+                    val a0 = f.lanternA - FareroAntiguo.CONE_HALF + 2f * FareroAntiguo.CONE_HALF * i / steps
+                    val a1 = f.lanternA - FareroAntiguo.CONE_HALF + 2f * FareroAntiguo.CONE_HALF * (i + 1) / steps
+                    shapes.triangle(f.x, f.y, f.x + cos(a0) * FareroAntiguo.CONE_LEN, f.y + sin(a0) * FareroAntiguo.CONE_LEN,
+                        f.x + cos(a1) * FareroAntiguo.CONE_LEN, f.y + sin(a1) * FareroAntiguo.CONE_LEN)
+                }
+            }
+            if (f.act == FareroAntiguo.Act.CHARGE_WARN) {
+                col(Pal.CORAL, if (blink) 0.7f else 0.35f)
+                shapes.rectLine(f.x, f.y, w.player.cx, w.player.cy, 1f)
+            }
+            if (f.phase == 3 && f.breathT < 1f) {
+                col(Pal.RAZ_VOID, 0.35f * (1f - f.breathT))
+                shapes.rect(0f, 0f, w.room.width.toFloat(), w.room.height.toFloat())
+            }
+        }
         val lamp = w.boss as? LamparaMadre ?: return
         if (lamp.killed) return
         val h = w.room.height.toFloat()
@@ -1349,6 +1384,8 @@ class Renderer : Disposable {
         if (e is Obispo) { drawObispo(w, e, x, y, flash, blink); return }
         if (e is Cartografo) { drawCartografo(w, e, x, y, flash, blink); return }
         if (e is LamparaMadre) { drawLampara(w, e, x, y, flash, blink); return }
+        if (e is FareroAntiguo) { drawFarero(e, x, y, flash, blink); return }
+        if (e is Criatura) { drawCriatura(e, x, y, flash, blink); return }
         if (e is Anguila && e.phase != Anguila.Phase.EXPOSED) {
             // Bajo el suelo: solo una onda en la tierra.
             col(Pal.ROOT, 0.5f)
@@ -1672,6 +1709,34 @@ class Renderer : Disposable {
     }
 
     /** La Lámpara Madre: jaula de cristal con la llama; desde la fase 2 se abre y se ve un ojo. */
+    /** El Farero Antiguo: viejo alto con capote, bastón y farol. */
+    private fun drawFarero(f: FareroAntiguo, x: Float, y: Float, flash: Boolean, blink: Boolean) {
+        col(Pal.SHADOW)
+        shapes.ellipse(x - 9f, y - 12f, 18f, 5f)
+        val coat = if (flash) Color.WHITE else if (f.act == FareroAntiguo.Act.EXPOSED && blink) Pal.CORAL else Pal.STONE
+        outlined(x - 7f, y - 10f, 14f, 16f, coat)
+        outlined(x - 5f, y + 6f, 10f, 8f, Pal.BONE)
+        col(Pal.OUTLINE); shapes.rect(x - 3f, y + 9f, 2f, 2f); shapes.rect(x + 1f, y + 9f, 2f, 2f)
+        outlined(x - 6f, y + 13f, 12f, 3f, Pal.SEAM)
+        // Bastón
+        col(Pal.OUTLINE); shapes.rect(x - 11f, y - 10f, 2f, 22f)
+        // Farol
+        val lx = x + cos(f.lanternA) * 10f
+        val ly = y + sin(f.lanternA) * 10f
+        outlined(lx - 3f, ly - 3f, 6f, 6f, if (f.lanternOn) Pal.LAMP_HI else Pal.SEAM)
+        if (f.state == EState.TELEGRAPH && blink) { col(Pal.CORAL); shapes.rect(x - 1f, y + 18f, 2f, 4f) }
+    }
+
+    /** La criatura de la fosa: solo se ve su respiración luminosa y las fauces cuando está expuesta. */
+    private fun drawCriatura(c: Criatura, x: Float, y: Float, flash: Boolean, blink: Boolean) {
+        col(Pal.RAZ_VOID, 0.9f)
+        shapes.ellipse(x - 14f, y - 11f, 28f, 22f)
+        col(if (flash) Color.WHITE else Pal.MOLTEN, 0.4f + 0.5f * c.breath)
+        shapes.ellipse(x - 5f, y - 3f, 10f, 6f)
+        if (c.exposed) { col(Pal.CORAL); shapes.rect(x - 8f, y - 7f, 16f, 2f) }
+        if (c.state == EState.TELEGRAPH && blink) { col(Pal.CORAL); shapes.ellipse(x - 3f, y - 2f, 6f, 4f) }
+    }
+
     private fun drawLampara(w: World, l: LamparaMadre, x: Float, y: Float, flash: Boolean, blink: Boolean) {
         col(Pal.SHADOW)
         shapes.ellipse(x - 20f, y - 22f, 40f, 8f)
@@ -2153,7 +2218,7 @@ class Renderer : Disposable {
             World.Mode.VICTORY -> {
                 val mm = (w.time / 60f).toInt()
                 val ss = (w.time % 60f).toInt()
-                val ending = if (w.biome == Biome.RAIZ) (if (Meta.allBottles) Story.FINAL_B else Story.FINAL_A) else null
+                val ending = if (w.biome == Biome.RAIZ) (if (w.finalC) Story.FINAL_C else if (Meta.allBottles) Story.FINAL_B else Story.FINAL_A) else null
                 text(ending?.first ?: "${w.biome.label} COMPLETADA", iw / 2f, ih * 0.80f, Pal.LAMP, align = 0)
                 ending?.let { text(it.second, iw / 2f, ih * 0.72f, Pal.CREAM, align = 0, wrap = iw * 0.8f) }
                 text("Tiempo ${mm}:${ss.toString().padStart(2, '0')}  ·  ${w.kills} bajas  ·  ${w.owned.size} exvotos", iw / 2f, ih * 0.52f, Pal.CREAM, align = 0)

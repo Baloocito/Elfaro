@@ -481,5 +481,51 @@
       "telegraph": 0,
       "cooldown": 0
     }
+  },
+  {
+    "id": "farero",
+    "name": "El Farero Antiguo",
+    "biome": "jefe",
+    "hp": 2400,
+    "dmg": 16,
+    "speed": 46,
+    "cost": 0,
+    "body": [
+      14,
+      20
+    ],
+    "luzDrop": [
+      0,
+      0
+    ],
+    "attack": {
+      "kind": "search",
+      "range": 30,
+      "telegraph": 0.6,
+      "cooldown": 2.4
+    }
+  },
+  {
+    "id": "criatura",
+    "name": "La criatura de la fosa",
+    "biome": "jefe",
+    "hp": 1200,
+    "dmg": 18,
+    "speed": 58,
+    "cost": 0,
+    "body": [
+      26,
+      22
+    ],
+    "luzDrop": [
+      0,
+      0
+    ],
+    "attack": {
+      "kind": "lunge",
+      "range": 60,
+      "telegraph": 0.5,
+      "cooldown": 2.2
+    }
   }
 ]
