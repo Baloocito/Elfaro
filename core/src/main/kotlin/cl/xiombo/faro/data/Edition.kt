@@ -10,6 +10,9 @@ import com.badlogic.gdx.Gdx
 object Edition {
     val demo: Boolean by lazy { runCatching { Gdx.files.internal("demo.flag").exists() }.getOrDefault(false) }
 
+    /** Teclas de depuración: siempre en la versión completa; en la demo solo con -Dfaro.debug=true (PC). */
+    val debugAllowed: Boolean by lazy { !demo || runCatching { System.getProperty("faro.debug") == "true" }.getOrDefault(false) }
+
     const val DEMO_THANKS = "GRACIAS POR TU APOYO"
     const val DEMO_TEXT = "La Sirena de Brea te espera al otro lado. Tu copia completa llegará con el lanzamiento del juego."
 }

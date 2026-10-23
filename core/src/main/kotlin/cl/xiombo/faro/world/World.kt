@@ -796,7 +796,7 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
             return
         }
 
-        if (inp.debugCmd != 0 && !cl.xiombo.faro.data.Edition.demo) debugCommand(inp.debugCmd)
+        if (inp.debugCmd != 0 && cl.xiombo.faro.data.Edition.debugAllowed) debugCommand(inp.debugCmd)
         if (demoEndT > 0f) {
             demoEndT -= dt
             if (demoEndT <= 0f) endDemo()
