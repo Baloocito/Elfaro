@@ -64,7 +64,7 @@ object Story {
 
     const val LECTURA = "Reto: despeja la sala sin usar el Haz y el atril te dará un exvoto raro."
     const val CORAZON = "Una raíz enorme late en el centro. Si la golpeas, despertará algo."
-    const val VICTORIA_FINAL = "Has llegado al fondo del faro. Las Mareas y el final C llegan en la F4."
+    const val VICTORIA_FINAL = "Has llegado al fondo del faro. Con Marea 5 o más, vela frente a la lámpara antes de luchar."
 
     /** Amparo, la guardesa del faro: está encerrada en una celda del Muelle. Abre la tienda del Santuario. */
     val AMPARO = Memory(

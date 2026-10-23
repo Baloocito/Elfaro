@@ -5,6 +5,8 @@ import cl.xiombo.faro.input.Bindings
 import cl.xiombo.faro.input.Controls
 import cl.xiombo.faro.input.Gamepad
 import cl.xiombo.faro.input.Layout
+import cl.xiombo.faro.data.Seed
+import cl.xiombo.faro.data.Settings
 import com.badlogic.gdx.Gdx
 
 /**
@@ -20,7 +22,7 @@ import com.badlogic.gdx.Gdx
  */
 class PauseMenu {
     enum class Mode { MAIN, CONFIG }
-    enum class Page { TITLE, TESTS, PAUSE }
+    enum class Page { TITLE, TESTS, PAUSE, SEED, OPTIONS, LOG }
 
     /** Lo que RunScreen debe hacer tras elegir una opción. */
     sealed class Request {
@@ -28,6 +30,7 @@ class PauseMenu {
         object Play : Request()
         object ToTitle : Request()
         class Test(val floor: Int, val toBoss: Boolean = false, val toCell: Boolean = false) : Request()
+        class PlaySeed(val seed: Long) : Request()
     }
 
     private class Item(val label: String, val action: () -> Unit)
@@ -61,11 +64,24 @@ class PauseMenu {
         const val BTN_W = 100f
         const val CAPTURE_TIME = 6f
 
-        fun itemAt(ix: Float, iy: Float, n: Int): Int {
+        /** Y de las opciones según la página (en Semilla y Registro van abajo). */
+        fun itemYFor(page: Page, i: Int, n: Int) = when (page) {
+            Page.SEED -> 112f - i * ITEM_STEP
+            Page.LOG -> 34f
+            else -> itemY(i, n)
+        }
+
+        // Editor de semilla: 8 casillas centradas.
+        const val SEED_Y = 168f
+        const val SEED_W = 24f
+        const val SEED_H = 30f
+        fun seedSlotX(i: Int) = 240f - Seed.LEN * SEED_W / 2f + i * SEED_W
+
+        fun itemAt(ix: Float, iy: Float, n: Int, page: Page = Page.TITLE): Int {
             val x0 = (480f - ITEM_W) / 2f
             if (ix < x0 || ix > x0 + ITEM_W) return -1
             for (i in 0 until n) {
-                val y = itemY(i, n)
+                val y = itemYFor(page, i, n)
                 if (iy >= y - itemH(n) / 2f && iy <= y + itemH(n) / 2f) return i
             }
             return -1
@@ -99,6 +115,12 @@ class PauseMenu {
         private set
     /** Hay una run guardada (para mostrar "Continuar descenso"). */
     var hasSave = false
+    /** Semilla de la run en curso (se ve en la pausa). */
+    var seedCode = ""
+    /** Semilla que se está escribiendo en "Jugar semilla". */
+    val seedChars = CharArray(Seed.LEN) { 'A' }
+    var seedSlot = 0
+        private set
     var request: Request? = null
     private var items: List<Item> = emptyList()
     val labels: List<String> get() = items.map { it.label }
@@ -106,7 +128,10 @@ class PauseMenu {
         get() = when (page) {
             Page.TITLE -> "FARO HUNDIDO"
             Page.TESTS -> "NIVELES DE PRUEBA"
-            Page.PAUSE -> "PAUSA"
+            Page.PAUSE -> if (seedCode.isNotEmpty()) "PAUSA  ·  SEMILLA $seedCode" else "PAUSA"
+            Page.SEED -> "JUGAR SEMILLA"
+            Page.OPTIONS -> "OPCIONES"
+            Page.LOG -> "REGISTRO DE RUNS"
         }
     var sel = 0
         private set
@@ -152,16 +177,35 @@ class PauseMenu {
         setPage(Page.TITLE)
     }
 
-    private fun setPage(p: Page) {
+    private var backPage = Page.TITLE
+
+    private fun setPage(p: Page, keepSel: Boolean = false) {
+        if (p == Page.TITLE || p == Page.PAUSE) backPage = p
         page = p
-        sel = 0
+        if (!keepSel) sel = 0
         items = when (p) {
             Page.TITLE -> buildList {
                 if (hasSave) add(Item("Continuar descenso") { finish(Request.Continue) })
                 add(Item("Jugar  ·  ir al Santuario") { finish(Request.Play) })
+                add(Item("Jugar una semilla") { setPage(Page.SEED) })
                 add(Item("Niveles de prueba") { setPage(Page.TESTS) })
+                add(Item("Opciones") { setPage(Page.OPTIONS) })
+                add(Item("Registro de runs") { setPage(Page.LOG) })
                 add(Item(CONFIG_LABEL) { openConfig() })
             }
+            Page.SEED -> listOf(
+                Item("Jugar esta semilla") { playSeed() },
+                Item("Volver") { setPage(Page.TITLE) },
+            )
+            Page.LOG -> listOf(Item("Volver") { setPage(Page.TITLE) })
+            Page.OPTIONS -> listOf(
+                Item("Temblor de pantalla: ${yes(Settings.shake)}") { Settings.shake = !Settings.shake; saveOpts() },
+                Item("Vibración del mando: ${yes(Settings.rumble)}") { Settings.rumble = !Settings.rumble; saveOpts() },
+                Item("Destellos suaves: ${yes(Settings.softFlashes)}") { Settings.softFlashes = !Settings.softFlashes; saveOpts() },
+                Item("Volumen de la música: ${Settings.music}") { Settings.music = (Settings.music + 1) % 11; saveOpts() },
+                Item("Volumen de los efectos: ${Settings.sfx}") { Settings.sfx = (Settings.sfx + 1) % 11; saveOpts() },
+                Item("Volver") { setPage(backPage) },
+            )
             Page.TESTS -> listOf(
                 Item("Muelle Ahogado  ·  piso 1") { finish(Request.Test(1)) },
                 Item("Jefe: La Sirena de Brea") { finish(Request.Test(3, toBoss = true)) },
@@ -176,11 +220,30 @@ class PauseMenu {
             )
             Page.PAUSE -> listOf(
                 Item("Continuar") { open = false },
+                Item("Opciones") { setPage(Page.OPTIONS) },
                 Item(CONFIG_LABEL) { openConfig() },
                 Item("Abandonar run") { if (inRun) { abandonRequested = true; open = false } else say("Ya estás en el Santuario") },
                 Item("Menú principal") { finish(Request.ToTitle) },
             )
         }
+    }
+
+    private fun yes(b: Boolean) = if (b) "Sí" else "No"
+
+    private fun saveOpts() {
+        Settings.save()
+        setPage(Page.OPTIONS, keepSel = true)
+    }
+
+    private fun playSeed() {
+        val s = Seed.decode(String(seedChars))
+        if (s == null) say("Semilla no válida", true) else finish(Request.PlaySeed(s))
+    }
+
+    private fun bumpSeed(slot: Int, d: Int) {
+        val a = Seed.ALPHABET
+        val i = (a.indexOf(seedChars[slot]).coerceAtLeast(0) + d + a.length) % a.length
+        seedChars[slot] = a[i]
     }
 
     private fun finish(r: Request) {
@@ -221,18 +284,42 @@ class PauseMenu {
         pendingPad = pad
         val mi = c.menuInput
         val n = items.size
-        if (mi.up || pad.navUp) sel = (sel + n - 1) % n
-        if (mi.down || pad.navDown) sel = (sel + 1) % n
+        if (page == Page.SEED) {
+            // Arriba/abajo cambian la letra; izquierda/derecha, la casilla. Aceptar juega.
+            if (mi.up || pad.navUp) bumpSeed(seedSlot, 1)
+            if (mi.down || pad.navDown) bumpSeed(seedSlot, -1)
+            if (mi.left || pad.navLeft) seedSlot = (seedSlot + Seed.LEN - 1) % Seed.LEN
+            if (mi.right || pad.navRight) seedSlot = (seedSlot + 1) % Seed.LEN
+            if (mi.hasTap) for (i in 0 until Seed.LEN) {
+                val x = seedSlotX(i)
+                if (mi.tapX >= x && mi.tapX <= x + SEED_W && mi.tapY >= SEED_Y - SEED_H && mi.tapY <= SEED_Y + SEED_H) {
+                    seedSlot = i
+                    bumpSeed(i, if (mi.tapY >= SEED_Y) 1 else -1)
+                }
+            }
+        } else {
+            if (mi.up || pad.navUp) sel = (sel + n - 1) % n
+            if (mi.down || pad.navDown) sel = (sel + 1) % n
+        }
+        // Opciones: izquierda/derecha bajan o suben los volúmenes.
+        if (page == Page.OPTIONS && (mi.left || pad.navLeft || mi.right || pad.navRight)) {
+            val d = if (mi.left || pad.navLeft) -1 else 1
+            when (sel) {
+                3 -> { Settings.music = (Settings.music + d).coerceIn(0, 10); saveOpts() }
+                4 -> { Settings.sfx = (Settings.sfx + d).coerceIn(0, 10); saveOpts() }
+            }
+        }
         var choose = -1
         if (mi.confirm || pad.confirm) choose = sel
         if (mi.hasTap) {
-            val t = itemAt(mi.tapX, mi.tapY, n)
+            val t = itemAt(mi.tapX, mi.tapY, n, page)
             if (t >= 0) { sel = t; choose = t }
         }
         if (choose < 0 && (mi.back || mi.pause || pad.back || pad.startPressed)) {
             when (page) {
                 Page.PAUSE -> open = false
-                Page.TESTS -> setPage(Page.TITLE)
+                Page.TESTS, Page.SEED, Page.LOG -> setPage(Page.TITLE)
+                Page.OPTIONS -> setPage(backPage)
                 Page.TITLE -> {}   // el menú principal no se cierra sin elegir
             }
             return

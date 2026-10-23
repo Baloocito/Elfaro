@@ -1,5 +1,6 @@
 package cl.xiombo.faro.world
 
+import cl.xiombo.faro.data.Balance
 import cl.xiombo.faro.data.EnemyDef
 import cl.xiombo.faro.data.Pal
 import cl.xiombo.faro.util.dist
@@ -69,7 +70,7 @@ class Tinta(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) : Enem
             }
             EState.RECOVER -> {
                 stateT -= dt
-                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown }
+                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown * Balance.cooldownMul }
             }
             EState.DYING -> {}
         }
@@ -194,7 +195,7 @@ class Copista(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) : En
             }
             EState.RECOVER -> {
                 stateT -= dt
-                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown }
+                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown * Balance.cooldownMul }
             }
             else -> {}
         }

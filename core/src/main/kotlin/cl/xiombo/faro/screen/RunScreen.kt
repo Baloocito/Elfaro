@@ -45,6 +45,7 @@ class RunScreen : KtxScreen {
                 menu.openTitle(RunSave.exists())
             }
             is PauseMenu.Request.Test -> newWorld(World.testRun(r.floor, r.toBoss, r.toCell))
+            is PauseMenu.Request.PlaySeed -> newWorld(World.newRun(r.seed))
         }
     }
 
@@ -56,6 +57,7 @@ class RunScreen : KtxScreen {
         pad.poll()
         controls.menuOpen = menu.open
         menu.inRun = !world.inSanctuary && world.mode == World.Mode.PLAYING
+        menu.seedCode = if (world.inSanctuary) "" else world.seedCode
 
         if (menu.open) {
             menu.update(pad, controls)
@@ -88,7 +90,7 @@ class RunScreen : KtxScreen {
 
         if (world.hurtCount != lastHurt) {
             lastHurt = world.hurtCount
-            pad.rumble(180, 0.7f)
+            if (cl.xiombo.faro.data.Settings.rumble) pad.rumble(180, 0.7f)
         }
 
         controls.useVisible = world.interactable != null

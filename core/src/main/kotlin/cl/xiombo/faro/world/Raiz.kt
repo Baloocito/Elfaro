@@ -1,5 +1,6 @@
 package cl.xiombo.faro.world
 
+import cl.xiombo.faro.data.Balance
 import cl.xiombo.faro.data.EnemyDef
 import cl.xiombo.faro.data.Pal
 import cl.xiombo.faro.data.Weapon
@@ -101,7 +102,7 @@ class HijoDelFaro(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) 
             }
             EState.RECOVER -> {
                 stateT -= dt
-                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown }
+                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown * Balance.cooldownMul }
             }
             else -> {}
         }
@@ -174,7 +175,7 @@ class Vidriero(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) : E
             }
             EState.RECOVER -> {
                 stateT -= dt
-                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown }
+                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown * Balance.cooldownMul }
             }
             else -> {}
         }
@@ -230,7 +231,7 @@ class OjoFosa(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) : En
             }
             EState.RECOVER -> {
                 stateT -= dt
-                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown }
+                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown * Balance.cooldownMul }
             }
             else -> {}
         }

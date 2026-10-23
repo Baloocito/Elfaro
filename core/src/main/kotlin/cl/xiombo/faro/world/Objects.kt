@@ -2,6 +2,8 @@ package cl.xiombo.faro.world
 
 import cl.xiombo.faro.data.Balance
 import cl.xiombo.faro.data.ExvotoDef
+import cl.xiombo.faro.data.Mareas
+import cl.xiombo.faro.data.Meta
 import cl.xiombo.faro.data.Tag
 import cl.xiombo.faro.data.Weapon
 import com.badlogic.gdx.graphics.Color
@@ -16,6 +18,8 @@ enum class PedKind {
     JAULA, AMPARO,
     /** Botella con mensaje (Sala de lectura, salas secretas). [metaId] = id de la botella. */
     BOTELLA,
+    /** Santuario: elegir la Marea de la próxima run. */
+    MAREA,
 }
 
 /**
@@ -56,6 +60,7 @@ class Pedestal(
             PedKind.JAULA -> "Abrir la celda"
             PedKind.AMPARO -> "Amparo, la guardesa"
             PedKind.BOTELLA -> "Botella con mensaje"
+            PedKind.MAREA -> "La Marea: ${Mareas.label(Meta.marea, Meta.mareaBaja)}"
         }
 
     val detail: String
@@ -83,6 +88,9 @@ class Pedestal(
             PedKind.JAULA -> if (selected) "Los guardias cayeron. Ábrela." else "Alguien sigue vivo ahí dentro. Primero, acaba con los guardias."
             PedKind.AMPARO -> "Hablar."
             PedKind.BOTELLA -> "Leerla. Cuenta para el final B."
+            PedKind.MAREA -> if (Meta.mareaBaja) Mareas.BAJA_TEXT
+                else "Usar cambia de nivel (desbloqueada hasta la ${Meta.mareaMax}). ${Mareas.RULES[Meta.marea]}" +
+                    if (Meta.marea > 0) " Y todo lo anterior. +${Meta.marea * 20} % de Perlas." else ""
         }
 }
 

@@ -65,6 +65,9 @@ fun createEnemy(id: String, x: Float, y: Float, floor: Int, affix: Affix? = null
 abstract class Enemy(val def: EnemyDef, x: Float, y: Float, val floor: Int, val affix: Affix?) :
     Body(x, y, def.hw, def.hh) {
     val isElite = affix != null
+    /** Marea 9: las élites llevan un segundo afijo. */
+    var affix2: Affix? = null
+    fun has(a: Affix) = affix == a || affix2 == a
     open val isBoss: Boolean get() = false
     /** Jefes: la barra de vida aparece cuando termina la presentación. */
     open val introduced: Boolean get() = true
@@ -109,7 +112,7 @@ abstract class Enemy(val def: EnemyDef, x: Float, y: Float, val floor: Int, val 
     private var puddleT = 0f
     /** Bendecido: segundos hasta que vuelve el escudo (<= 0 = escudo puesto). */
     var shieldCd = 0f
-    val shielded get() = affix == Affix.BENDECIDO && shieldCd <= 0f && !killed
+    val shielded get() = has(Affix.BENDECIDO) && shieldCd <= 0f && !killed
 
     /** killed: ya soltó Luz y cuenta como baja. dead: se retira de la lista. */
     var killed = false
@@ -122,7 +125,7 @@ abstract class Enemy(val def: EnemyDef, x: Float, y: Float, val floor: Int, val 
     val spd get() = (if (slowed) speed * slowMul else speed) * boost
 
     /** Solo existe dentro de tu luz (Tinta, élites Tachados): no se ve ni se golpea fuera de ella. */
-    open val needsLight: Boolean get() = affix == Affix.TACHADO
+    open val needsLight: Boolean get() = has(Affix.TACHADO)
     /** Dentro de la luz de Isla este tick (lo pone World). */
     var inLight = true
     /** La Campana revela a los que solo existen en la luz durante 3 s. */
@@ -131,7 +134,7 @@ abstract class Enemy(val def: EnemyDef, x: Float, y: Float, val floor: Int, val 
     open val targetable get() = !killed && !hidden
     open val lightRadius: Float
         get() = when {
-            affix == Affix.BRILLANTE && !killed -> 40f
+            has(Affix.BRILLANTE) && !killed -> 40f
             state == EState.TELEGRAPH -> 22f
             else -> 0f
         }
@@ -169,7 +172,7 @@ abstract class Enemy(val def: EnemyDef, x: Float, y: Float, val floor: Int, val 
             kbX = approach(kbX, 0f, 700f * dt)
             kbY = approach(kbY, 0f, 700f * dt)
         }
-        if (affix == Affix.SALADO && !killed) {
+        if (has(Affix.SALADO) && !killed) {
             puddleT -= dt
             if (puddleT <= 0f) {
                 puddleT = 0.6f
@@ -199,7 +202,7 @@ abstract class Enemy(val def: EnemyDef, x: Float, y: Float, val floor: Int, val 
             HitKind.HAZ -> flash = 0.03f
             HitKind.BURN -> {}
         }
-        if (affix == Affix.GEMELO && !split && hp > 0f && hp <= maxHp / 2f) {
+        if (has(Affix.GEMELO) && !split && hp > 0f && hp <= maxHp / 2f) {
             split = true
             w.splitTwin(this)
         }
@@ -238,7 +241,7 @@ abstract class Enemy(val def: EnemyDef, x: Float, y: Float, val floor: Int, val 
         slowT = max(slowT, t)
     }
 
-    protected fun beginTelegraph(t: Float) { state = EState.TELEGRAPH; stateT = t }
+    protected fun beginTelegraph(t: Float) { state = EState.TELEGRAPH; stateT = Balance.telegraph(t) }
 }
 
 /** Ahogado: persigue y embiste 40 px tras agacharse y brillar 0,4 s. */
@@ -271,7 +274,7 @@ class Ahogado(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) : En
             }
             EState.RECOVER -> {
                 stateT -= dt
-                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown }
+                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown * Balance.cooldownMul }
             }
             EState.DYING -> {}
         }
@@ -330,7 +333,7 @@ class Medusa(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) : Ene
             }
             EState.RECOVER -> {
                 stateT -= dt
-                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown }
+                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown * Balance.cooldownMul }
             }
             else -> {}
         }
@@ -403,7 +406,7 @@ class Cangrejo(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) : E
             }
             EState.RECOVER -> {
                 stateT -= dt
-                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown }
+                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown * Balance.cooldownMul }
             }
             EState.DYING -> {}
         }

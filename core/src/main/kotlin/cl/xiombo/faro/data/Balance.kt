@@ -65,10 +65,20 @@ object Balance {
     const val HITSTOP_HURT = 3
     const val HITSTOP_HIT = 2
 
-    // §6 Escalado por piso f y Marea m
-    fun hpMul(f: Int, m: Int = 0) = (1f + 0.15f * (f - 1)) * (1f + 0.05f * m)
-    fun dmgMul(f: Int, m: Int = 0) = (1f + 0.08f * (f - 1)) * (1f + 0.06f * m)
+    // §6 Escalado por piso f y Marea m. La Marea de la run en curso la pone World al empezar.
+    var marea = 0
+    var baja = false
+    fun hpMul(f: Int, m: Int = marea) = (1f + 0.15f * (f - 1)) * (1f + 0.05f * m)
+    fun dmgMul(f: Int, m: Int = marea) = (1f + 0.08f * (f - 1)) * (1f + 0.06f * m) * (if (baja) 0.7f else 1f)
     fun speedMul(f: Int) = 1f + min(0.02f * (f - 1), 0.25f)
-    fun budget(f: Int, m: Int = 0) = 8 + 3 * f + 2 * m
+    fun budget(f: Int, m: Int = marea) = 8 + 3 * f + 2 * m
+    /** Marea 3: atacan un 10 % más seguido. */
+    val cooldownMul get() = if (marea >= 3) 0.9f else 1f
+    /** Marea 6: avisos más cortos (mínimo 0,3 s). Marea baja: un 30 % más largos. */
+    fun telegraph(t: Float) = when {
+        baja -> t * 1.3f
+        marea >= 6 -> kotlin.math.max(0.3f, t * 0.75f)
+        else -> t
+    }
     fun maxAlive(f: Int) = 5 + f / 4
 }

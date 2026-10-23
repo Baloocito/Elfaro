@@ -1,5 +1,6 @@
 package cl.xiombo.faro.world
 
+import cl.xiombo.faro.data.Balance
 import cl.xiombo.faro.data.EnemyDef
 import cl.xiombo.faro.data.Pal
 import com.badlogic.gdx.math.MathUtils
@@ -58,7 +59,7 @@ class Monaguillo(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) :
             }
             EState.RECOVER -> {
                 stateT -= dt
-                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown }
+                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown * Balance.cooldownMul }
             }
             else -> {}
         }
@@ -97,7 +98,7 @@ class Campanero(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) : 
             }
             EState.RECOVER -> {
                 stateT -= dt
-                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown }
+                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown * Balance.cooldownMul }
             }
             else -> {}
         }
@@ -147,7 +148,7 @@ class Vela(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) : Enemy
             }
             EState.RECOVER -> {
                 stateT -= dt
-                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown }
+                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown * Balance.cooldownMul }
             }
             else -> {}
         }
@@ -194,7 +195,7 @@ class Cofrade(def: EnemyDef, x: Float, y: Float, floor: Int, affix: Affix?) : En
             }
             EState.RECOVER -> {
                 stateT -= dt
-                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown }
+                if (stateT <= 0f) { state = EState.MOVE; cd = def.cooldown * Balance.cooldownMul }
             }
             EState.DYING -> {}
         }
@@ -332,7 +333,7 @@ class Obispo(def: EnemyDef, x: Float, y: Float) : Enemy(def, x, y, 1, null) {
                 }
             }
             Act.SWEEP -> if (actT <= 0f) {
-                cd = def.cooldown
+                cd = def.cooldown * Balance.cooldownMul
                 setAct(if (phase == 2) Act.ALTAR else Act.WALK, 0f)
             }
         }
