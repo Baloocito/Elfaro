@@ -82,5 +82,60 @@ object Story {
         "La lámpara no se apagó sola. Eso lo sé desde hace veinte años.",
     )
 
+    /** Náufragos rescatables (§15): uno por bioma, encerrado en una celda custodiada. */
+    class Castaway(val key: String, val name: String, val biome: Biome, val rescue: Memory, val banner: String, val lines: List<String>)
+
+    val CASTAWAYS = listOf(
+        Castaway(
+            Meta.GUARDESA, "Amparo, la guardesa", Biome.MUELLE, AMPARO,
+            "AMPARO ES LIBRE  ·  EL SANTUARIO ABRE SU TIENDA", AMPARO_LINES,
+        ),
+        Castaway(
+            Meta.RESCUE_CAMPANERO, "Bruno, el campanero renegado", Biome.CATEDRAL,
+            Memory(
+                "Bruno, el campanero renegado",
+                "Cuando el obispo cerró la catedral por dentro, yo seguí tocando desde la torre hasta que el agua " +
+                    "llegó a las campanas. Aprendí a oír lo que no se ve. Sácame de aquí y bajaré contigo.",
+            ),
+            "EL CAMPANERO ES LIBRE  ·  PUEDES CONTRATARLO EN EL SANTUARIO",
+            listOf(
+                "Las campanas no llamaban a misa. Le decían a lo de abajo dónde estábamos.",
+                "Oigo a la Tinta antes de verla. Si me llevas, tú también.",
+                "El obispo no era malo. Tenía miedo, como todos.",
+            ),
+        ),
+        Castaway(
+            Meta.RESCUE_CARTOGRAFA, "Lucía, la cartógrafa", Biome.ARCHIVO,
+            Memory(
+                "Lucía, la cartógrafa",
+                "Era aprendiz de Elías. Él dibujaba la fosa; yo dibujaba las salidas. Ninguna llegaba arriba. " +
+                    "Sube conmigo al Santuario: te marcaré en el mapa lo que importa.",
+            ),
+            "LA CARTÓGRAFA ES LIBRE  ·  ABRE SU PUESTO EN EL SANTUARIO",
+            listOf(
+                "Cada piso es distinto, pero la fosa siempre está en el mismo sitio: debajo.",
+                "Elías quemó los mapas buenos. Los que quedan mienten un poco.",
+                "Las salas especiales tienen otro olor. Te enseño a encontrarlas.",
+            ),
+        ),
+        Castaway(
+            Meta.HIJA, "Marina, la hija del Farero", Biome.RAIZ,
+            Memory(
+                "Marina, la hija del Farero",
+                "Mi padre no apagó la lámpara por miedo. Descubrió que la criatura no ve en la oscuridad: solo ve la " +
+                    "luz. Si bajas con la Marea alta y velas frente a la lámpara, no te verá llegar. Él no se atrevió.",
+            ),
+            "LA HIJA DEL FARERO ES LIBRE  ·  SABE CÓMO LLEGAR AL FINAL C",
+            listOf(
+                "Marea 5 o más. Llega hasta la lámpara y vela 3 segundos antes de que empiece. Entonces lo verás.",
+                "Mi padre sigue ahí abajo. No es un monstruo. Es un hombre que se quedó a oscuras.",
+                "Cuando lo veas, no le tengas lástima. Ten cuidado.",
+            ),
+        ),
+    )
+
+    fun castaway(key: String?) = CASTAWAYS.firstOrNull { it.key == key }
+    fun castawayOf(b: Biome) = CASTAWAYS.first { it.biome == b }
+
     const val CAPILLA = "El altar pide luz. Lo que da a cambio brilla más."
 }

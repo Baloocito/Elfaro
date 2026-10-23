@@ -20,6 +20,8 @@ enum class PedKind {
     BOTELLA,
     /** Santuario: elegir la Marea de la próxima run. */
     MAREA,
+    /** Santuario: náufrago rescatado ([metaId] = su clave), lote de exvotos y elección de personaje. */
+    NPC, LOTE, HEROE,
 }
 
 /**
@@ -61,6 +63,9 @@ class Pedestal(
             PedKind.AMPARO -> "Amparo, la guardesa"
             PedKind.BOTELLA -> "Botella con mensaje"
             PedKind.MAREA -> "La Marea: ${Mareas.label(Meta.marea, Meta.mareaBaja)}"
+            PedKind.NPC -> cl.xiombo.faro.data.Story.castaway(metaId)?.name ?: "Náufrago"
+            PedKind.LOTE -> if (Meta.lots >= cl.xiombo.faro.data.Exvotos.LOTS) "Pozo de exvotos completo" else "Pozo de exvotos  ·  lote ${Meta.lots + 1} de ${cl.xiombo.faro.data.Exvotos.LOTS}"
+            PedKind.HEROE -> "Personaje: ${if (Meta.hero == "campanero") "Bruno, el campanero" else "Isla, la farera"}"
         }
 
     val detail: String
@@ -88,6 +93,11 @@ class Pedestal(
             PedKind.JAULA -> if (selected) "Los guardias cayeron. Ábrela." else "Alguien sigue vivo ahí dentro. Primero, acaba con los guardias."
             PedKind.AMPARO -> "Hablar."
             PedKind.BOTELLA -> "Leerla. Cuenta para el final B."
+            PedKind.NPC -> "Hablar."
+            PedKind.LOTE -> lockedText?.let { "Bloqueado: $it." } ?: if (Meta.lots >= cl.xiombo.faro.data.Exvotos.LOTS) "Ya están todos en el pozo."
+                else "Añade al pozo: " + cl.xiombo.faro.data.Exvotos.all.filter { it.lot == Meta.lots + 1 }.joinToString(", ") { it.name } + "."
+            PedKind.HEROE -> if (Meta.campaneroPlayable) "Usar cambia de personaje. Bruno: +20 de Luz máxima, Campana +1, un 8 % más lento y oye a la Tinta a 64 px."
+                else "Rescata a Bruno en la Catedral y contrátalo en la tienda."
             PedKind.MAREA -> if (Meta.mareaBaja) Mareas.BAJA_TEXT
                 else "Usar cambia de nivel (desbloqueada hasta la ${Meta.mareaMax}). ${Mareas.RULES[Meta.marea]}" +
                     if (Meta.marea > 0) " Y todo lo anterior. +${Meta.marea * 20} % de Perlas." else ""
@@ -135,7 +145,7 @@ class Stats(owned: List<ExvotoDef>, val weaponLevel: Int, val weapon: Weapon = W
     val setHueso = tagCount(Tag.HUESO) >= 3
 
     val burnTime = Balance.BURN_TIME + if (has("mecha_trenzada")) 1f else 0f
-    val hazCost = if (has("ceniza_faro")) 6f else Balance.HAZ_COST
+    val hazCost = if (has("ceniza_faro")) 6f else if (has("lagrima_brea")) 7f else Balance.HAZ_COST
     val burnedDropBonus = if (has("corazon_vela")) 1 else 0
     val hazTrail = has("lengua_telmo")
     val slowedBonus = if (has("grano_sal")) 1.08f else 1f
@@ -149,6 +159,38 @@ class Stats(owned: List<ExvotoDef>, val weaponLevel: Int, val weapon: Weapon = W
     val rosario = has("rosario_vertebras")
     val eye = has("ojo_farero")
     val twinLamp = has("lampara_gemela")
+
+    // Lotes del Santuario
+    val burnedBonus = if (has("brasa_bolsillo")) 1.15f else 1f
+    val pavesa = has("pavesa")
+    val salmuera = has("salmuera")
+    val saltDash = has("cristal_roca")
+    val speedBonus = if (has("remo_roto")) 1.06f else 1f
+    val whaleBone = has("vertebra_ballena")
+    val burnDps = Balance.BURN_DPS + if (has("cera_virgen")) 1f else 0f
+    val lightBonus = if (has("ojo_buey")) 16f else 0f
+    val dashIframesBonus = if (has("escamas")) 0.25f else 0f
+    val dmgMul = if (has("diente_tiburon")) 1.08f else 1f
+    val saltRosary = has("rosario_sal")
+    val reserveWick = has("mecha_reserva")
+    val spyglass = has("catalejo")
+    val nacre = has("concha_nacar")
+    val bossMul = if (has("hueso_santo")) 1.1f else 1f
+    val hazBurns = has("lagrima_brea")
+    val coarseSalt = has("sal_gruesa")
+    val net = has("red_pesca")
+    val orbMul = if (has("brujula_muerta")) 1.15f else 1f
+    val extraOrb = if (has("pez_linterna")) 1 else 0
+    val lowHpBonus = if (has("calavera_cera")) 1.2f else 1f
+    val bellEvery5 = has("campanilla")
+    val dashRechargeMul = if (has("corriente")) 0.75f else 1f
+    val bellows = has("fuelle")
+    val knockMul = if (has("ancla_oxidada")) 1.3f else 1f
+    val glassEye = has("ojo_vidrio")
+    val flatDmg = if (has("diente_leche")) 2f else 0f
+    val thorns = has("espina_erizo")
+    val brazier = has("brasero")
+    val tideDash = has("marea_viva")
 
     // Velar y su Fogonazo
     val flashDmg = if (has("pabilo_corto")) 10f else 0f

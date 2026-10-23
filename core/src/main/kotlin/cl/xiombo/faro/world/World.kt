@@ -285,11 +285,17 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         }
     }
 
-    /** Piso del Muelle donde está la celda de Amparo en esta run (sale de la semilla: no hace falta guardarlo). */
-    private val rescueFloor = 1 + ((seed ushr 11) and 0x7fffffffL).toInt() % 3
+    /**
+     * Náufragos (§15): uno por bioma, en uno de sus 3 pisos (sale de la semilla: no hace falta guardarlo).
+     * Mientras no lo rescates, su celda aparece en cada run.
+     */
+    private fun rescueFloor(b: Biome) = b.firstFloor + ((seed ushr (11 + 5 * b.ordinal)) and 0x7fffffffL).toInt() % 3
     private var forceRescueFloor = -1
-    private fun hasRescue(floor: Int) =
-        floor == forceRescueFloor || (!test && floor == rescueFloor && !Meta.shopOpen)
+    private fun hasRescue(floor: Int): Boolean {
+        if (floor == forceRescueFloor) return true
+        val b = Biome.of(floor)
+        return !test && floor == rescueFloor(b) && Story.castawayOf(b).key !in Meta.unlocks
+    }
 
     /** Run nueva con lo elegido en el Santuario. */
     private fun initRun() {
@@ -299,6 +305,12 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         player.weapon = Meta.weapon
         // Marea 7: se empieza con 80 de Luz máxima.
         player.luzMax = (if (marea >= 7) 80f else Balance.LUZ_MAX) + 10f * Meta.luzLevel
+        // Bruno, el campanero: +20 de Luz máxima, Campana +1 y algo más lento.
+        if (Meta.hero == "campanero" && Meta.campaneroPlayable) {
+            player.luzMax += 20f
+            player.heroSpeed = 0.92f
+            if (player.weapon == Weapon.CAMPANA) weaponLevel = 1
+        }
         player.luz = player.luzMax
         Meta.startExvoto?.let { id -> runCatching { Exvotos.get(id) }.getOrNull()?.let { owned += it } }
         recomputeStats()
@@ -310,6 +322,7 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         hazUses = d.hazUses
         bossLuz += d.bossLuz
         player.weapon = runCatching { Weapon.valueOf(d.weapon) }.getOrDefault(Weapon.FAROL)
+        if (d.hero == "campanero") player.heroSpeed = 0.92f
         player.luzMax = d.luzMax
         weaponLevel = d.weaponLevel
         for (id in d.owned) runCatching { Exvotos.get(id) }.getOrNull()?.let { owned += it }
@@ -382,10 +395,13 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         map = FloorGen.generate(floorSeed, n, hasBoss = Biome.isBossFloor(n))
         if (hasRescue(n)) FloorGen.placeRescue(map)
         mapRevealed = false
+        wickUsed = false
         offered.clear()
         for (c in map.all) c.templateIndex = Random(c.seed).nextInt(templatesFor(c).size)
-        // La Cartógrafa: las salas especiales se ven en el mapa desde el inicio.
-        if (Meta.CARTOGRAFA in Meta.unlocks) {
+        // Vértebra de ballena: +10 de Luz máxima al empezar cada bioma.
+        if (stats.whaleBone && n == Biome.of(n).firstFloor && player.luzMax < 200f) { player.luzMax += 10f; player.luz += 10f }
+        // La Cartógrafa (y el Catalejo): las salas especiales se ven en el mapa desde el inicio.
+        if (Meta.CARTOGRAFA in Meta.unlocks || stats.spyglass) {
             for (c in map.all) if (c.type != CellType.COMBAT && c.type != CellType.SECRET) { c.known = true; c.iconShown = true }
         }
         enterCell(map.start, null)
@@ -530,12 +546,12 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
             }
             CellType.REFUGE -> pos.firstOrNull()?.let { c.pedestals += Pedestal(it[0], it[1], PedKind.REFUGIO) }
             CellType.ANTESALA -> pos.firstOrNull()?.let { c.pedestals += Pedestal(it[0], it[1], PedKind.VIGILIA) }
-            CellType.CELDA -> pos.firstOrNull()?.let { c.pedestals += Pedestal(it[0], it[1], PedKind.JAULA) }
+            CellType.CELDA -> pos.firstOrNull()?.let { c.pedestals += Pedestal(it[0], it[1], PedKind.JAULA, metaId = Story.castawayOf(biome).key) }
             CellType.LECTURA -> pos.firstOrNull()?.let { p -> bottlePed(p, guaranteed = true)?.let { c.pedestals += it } }
             CellType.CAPILLA -> if (pos.size >= 2) {
                 // El mismo exvoto (raro o mejor) por dos precios: 10 de Luz máxima o la mitad de tu Luz.
                 val exclude = owned.map { it.id }.toSet() + offered
-                val e = Exvotos.roll(rng, exclude, Rarity.RARO)
+                val e = Exvotos.roll(rng, exclude, Rarity.RARO, biome = biome.ordinal)
                 if (e != null) {
                     offered += e.id
                     c.pedestals += Pedestal(pos[0][0], pos[0][1], PedKind.OFRENDA_MAX, e)
@@ -568,11 +584,25 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
                 if (!unlocked) it.lockedText = if (price > 0 && !shop) CLOSED_SHOP else Meta.unlockRequirement(w)
             }
         }
-        // Amparo: rescatada, vive aquí y atiende la tienda.
-        if (shop) {
-            val a = room.nearestFloor(pos[7][0] + 96f, pos[7][1])
-            c.pedestals += Pedestal(a[0], a[1], PedKind.AMPARO)
+        // Náufragos rescatados: viven aquí. Amparo atiende la tienda.
+        val spots = listOf(
+            floatArrayOf(pos[7][0] + 96f, pos[7][1]), floatArrayOf(pos[5][0] - 96f, pos[5][1]),
+            floatArrayOf(pos[4][0] + 72f, pos[4][1]), floatArrayOf(pos[1][0] - 72f, pos[1][1]),
+        )
+        Story.CASTAWAYS.forEachIndexed { i, who ->
+            if (who.key in Meta.unlocks) {
+                val a = room.nearestFloor(spots[i][0], spots[i][1])
+                c.pedestals += Pedestal(a[0], a[1], PedKind.NPC, metaId = who.key)
+            }
         }
+        // Lotes de exvotos (arriba, al centro) y elección de personaje (junto al pozo).
+        val lot = room.nearestFloor((pos[9][0] + pos[10][0]) / 2f, pos[9][1])
+        c.pedestals += Pedestal(lot[0], lot[1], PedKind.LOTE, price = if (Meta.lots >= Exvotos.LOTS) 0 else Exvotos.LOT_PRICE).also {
+            it.taken = Meta.lots >= Exvotos.LOTS
+            if (!shop) it.lockedText = CLOSED_SHOP
+        }
+        val hero = room.nearestFloor(pos[0][0] + 64f, pos[0][1])
+        c.pedestals += Pedestal(hero[0], hero[1], PedKind.HEROE)
         if (Meta.PESCADORA in Meta.unlocks) {
             val commons = Exvotos.all.filter { it.rarity == Rarity.COMUN }
             val r = Random(Meta.perlas * 7919L + Meta.unlocks.size)
@@ -589,7 +619,7 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
             Triple(Meta.PESCADORA, "La Pescadora", "Abre su puesto: elige 1 exvoto común para empezar cada run.") to 20,
             Triple("luz", "Mecha del Santuario", "+10 de Luz máxima inicial (nivel ${Meta.luzLevel}/2).") to luzPrice,
             Triple(Meta.CARTOGRAFA, "La Cartógrafa", "Ves las salas especiales en el mapa desde el inicio de cada piso.") to 90,
-            Triple(Meta.CAMPANERO, "El Campanero renegado", "Segundo personaje jugable.") to 150,
+            Triple(Meta.CAMPANERO, "Bruno, el campanero renegado", "Segundo personaje jugable (elígelo junto al pozo).") to 150,
         )
         metas.forEachIndexed { i, (m, price) ->
             val p = pos[8 + i]
@@ -599,9 +629,9 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
             }
             c.pedestals += Pedestal(p[0], p[1], PedKind.META, price = if (have) 0 else price, metaId = m.first, metaTitle = m.second, metaDetail = m.third).also {
                 it.taken = have
-                if (m.first == Meta.CAMPANERO) it.lockedText = "rescátalo en la Catedral Sumergida"
-                else if (!have && !shop) it.lockedText = CLOSED_SHOP
-                else if (!have && m.first == Meta.CARTOGRAFA && "cartografo" !in Meta.bosses) it.lockedText = "vence al Cartógrafo en el Archivo de los Náufragos"
+                if (!have && !shop) it.lockedText = CLOSED_SHOP
+                else if (!have && m.first == Meta.CAMPANERO && Meta.RESCUE_CAMPANERO !in Meta.unlocks) it.lockedText = "rescátalo de su celda en la Catedral Sumergida"
+                else if (!have && m.first == Meta.CARTOGRAFA && Meta.RESCUE_CARTOGRAFA !in Meta.unlocks) it.lockedText = "rescátala de su celda en el Archivo de los Náufragos"
             }
         }
     }
@@ -630,7 +660,7 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
 
     private fun exvotoPed(p: FloatArray, priced: Boolean, min: Rarity = Rarity.COMUN): Pedestal {
         val exclude = owned.map { it.id }.toSet() + offered
-        val e = Exvotos.roll(rng, exclude, min) ?: return Pedestal(p[0], p[1], PedKind.MECHA, price = if (priced) MECHA_PRICE else 0)
+        val e = Exvotos.roll(rng, exclude, min, biome = biome.ordinal) ?: return Pedestal(p[0], p[1], PedKind.MECHA, price = if (priced) MECHA_PRICE else 0)
         offered += e.id
         return Pedestal(p[0], p[1], PedKind.EXVOTO, e, if (priced) shopPrice(e.rarity.price) else 0)
     }
@@ -748,8 +778,11 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         player.update(this, inp, dt)
         recordHistory()
         val light = playerLight()
+        // Ojo de vidrio (48 px) y el oído del Campanero (64 px) dejan ver a la Tinta y a los Tachados de cerca.
+        val near = max(if (stats.glassEye) 48f else 0f, if (Meta.hero == "campanero" && kind == Kind.RUN) 64f else 0f)
         for (e in enemies) {
-            e.inLight = dist(e.x, e.y, player.cx, player.cy) <= light + e.radius
+            val de = dist(e.x, e.y, player.cx, player.cy)
+            e.inLight = de <= light + e.radius || de <= near
             e.boost = if (beatBoostT > 0f) 1.3f else 1f
         }
 
@@ -772,6 +805,11 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
 
         updateTerrain(dt)
         updateArchivoRaiz(dt)
+        saltZones.removeAll { z ->
+            z[2] -= dt
+            for (e in enemies) if (!e.killed && dist(e.x, e.y, z[0], z[1]) < 14f + e.radius) e.slow(0.5f, 0.3f)
+            z[2] <= 0f
+        }
         updateVeilTracking()
         for (i in 0 until enemies.size) enemies[i].update(this, dt)
         if (newEnemies.isNotEmpty()) { enemies += newEnemies; newEnemies.clear() }
@@ -851,6 +889,10 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         } else if (cell.type != CellType.BOSS) {
             showBanner("SALA DESPEJADA")
         }
+        if (intact && cell.type != CellType.BOSS && stats.saltRosary && player.luzMax < 200f) {
+            player.luzMax += 2f
+            fx.floater("+2 LUZ MÁX.", player.cx, player.cy + 30f, Pal.SALADO)
+        }
         if (intact && cell.type != CellType.BOSS) {
             gainLuz(Balance.ROOM_INTACT_BONUS)
             fx.floater("SALA INTACTA +5", player.cx, player.cy + 22f, Pal.LAMP_HI)
@@ -915,7 +957,7 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
             o.x += o.vx * dt
             o.y += o.vy * dt
             if (d < 8f && o.age > 0.2f) {
-                gainLuz(o.value)
+                gainLuz(o.value * stats.orbMul)
                 it.remove()
             }
         }
@@ -1126,18 +1168,39 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
             }
             PedKind.JAULA -> {
                 if (!cell.cleared) { fx.floater("AÚN HAY GUARDIAS", p.x, p.y + 20f, Pal.CORAL); return }
+                val who = Story.castaway(p.metaId) ?: Story.castawayOf(biome)
                 p.taken = true
-                Meta.unlocks += Meta.GUARDESA
+                Meta.unlocks += who.key
                 Meta.save()
                 fx.burst(p.x, p.y + 8f, 24, Pal.LAMP_HI, 110f, 0.7f)
-                showBanner("AMPARO ES LIBRE  ·  EL SANTUARIO ABRE SU TIENDA", 3.5f)
-                memory = Story.AMPARO
+                showBanner(who.banner, 3.5f)
+                memory = who.rescue
                 memoryT = MEMORY_TIME
                 saveRun()
             }
-            PedKind.AMPARO -> {
-                showBanner("AMPARO: ${Story.AMPARO_LINES[amparoLine % Story.AMPARO_LINES.size].uppercase()}", 4f)
+            PedKind.AMPARO, PedKind.NPC -> {
+                val who = Story.castaway(p.metaId) ?: Story.CASTAWAYS[0]
+                val line = who.lines[amparoLine % who.lines.size]
+                memory = Story.Memory(who.name, line)
+                memoryT = 6f
                 amparoLine++
+            }
+            PedKind.LOTE -> {
+                if (Meta.lots >= Exvotos.LOTS) { fx.floater("COMPLETO", p.x, p.y + 16f, Pal.FOAM); return }
+                if (p.lockedText != null) { fx.floater("TIENDA CERRADA", p.x, p.y + 16f, Pal.CORAL); return }
+                if (!payPerlas(p.price)) return
+                Meta.lots++
+                Meta.save()
+                stockSanctuary()
+                fx.burst(p.x, p.y + 6f, 16, Pal.SHELL, 90f, 0.5f)
+                showBanner("6 EXVOTOS NUEVOS EN EL POZO", 1.8f)
+            }
+            PedKind.HEROE -> {
+                if (!Meta.campaneroPlayable) { fx.floater("CONTRATA A BRUNO PRIMERO", p.x, p.y + 16f, Pal.CORAL); return }
+                Meta.hero = if (Meta.hero == "campanero") "isla" else "campanero"
+                Meta.save()
+                fx.burst(p.x, p.y + 6f, 12, Pal.LILAC, 80f, 0.4f)
+                showBanner(if (Meta.hero == "campanero") "BAJA BRUNO, EL CAMPANERO" else "BAJA ISLA, LA FARERA", 1.6f)
             }
             PedKind.OFRENDA_MAX, PedKind.OFRENDA_MITAD -> {
                 val e = p.exvoto ?: return
@@ -1243,6 +1306,25 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
     }
 
     private var hasCoral = false
+
+    /** Sal del Destello (Cristal de roca): (x, y, s). */
+    val saltZones = ArrayList<FloatArray>()
+    private val killTimes = ArrayDeque<Float>()
+    /** Mecha de reserva ya usada en este piso. */
+    private var wickUsed = false
+
+    fun addSaltZone(x: Float, y: Float) { if (saltZones.size < 30) saltZones += floatArrayOf(x, y, 2f) }
+
+    /** Estallido de fuego: 8 de daño y Quemadura a [r] px (Fuelle, Mecha de reserva). */
+    fun fireBlast(x: Float, y: Float, r: Float = 32f) {
+        fx.blast(x, y, r)
+        fx.burst(x, y, 12, Pal.LAMP, 110f, 0.4f)
+        for (e in enemies) {
+            if (!e.targetable || dist(e.x, e.y, x, y) - e.radius > r) continue
+            e.takeHit(this, 8f, x, y, HitKind.BLAST)
+            e.burn(stats.burnTime)
+        }
+    }
 
     // ---------------------------------------------------------------- Archivo y Raíz
 
@@ -1596,6 +1678,7 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         var n = if (e.isElite) 6 else e.def.luzMin + rng.nextInt(e.def.luzMax - e.def.luzMin + 1)
         if (e.burnT > 0f) n += stats.burnedDropBonus
         if (player.luz < Balance.LOW_LUZ) n = ceil(n * 1.5f).toInt()
+        if (n > 0 || e.def.luzMax > 0) n += stats.extraOrb
         repeat(n) {
             orbs += Orb(e.x, e.y, rng.nextFloat() * 140f - 70f, rng.nextFloat() * 140f - 70f, 1f)
         }
@@ -1603,6 +1686,19 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
             for (o in enemies) if (o !== e && !o.killed && dist(o.x, o.y, e.x, e.y) < 36f) o.burn(stats.burnTime)
         }
         if (stats.setMarea) player.refillDash(stats.dashCharges)
+        // Pavesa: el quemado que muere quema al más cercano.
+        if (stats.pavesa && e.burnT > 0f) {
+            enemies.filter { it !== e && !it.killed && dist(it.x, it.y, e.x, e.y) < 64f }
+                .minByOrNull { dist(it.x, it.y, e.x, e.y) }?.let { it.burn(stats.burnTime); fx.ember(it.x, it.y) }
+        }
+        // Concha de nácar: +1 Perla por élite.
+        if (stats.nacre && e.isElite) { earnPerlas(1); fx.floater("+1 PERLA", e.x, e.y + 16f, Pal.SHELL) }
+        // Brasero: 3 muertes en 3 s devuelven 4 de Luz.
+        if (stats.brazier) {
+            killTimes.addLast(time)
+            while (killTimes.isNotEmpty() && time - killTimes.first() > 3f) killTimes.removeFirst()
+            if (killTimes.size >= 3) { killTimes.clear(); gainLuz(4f); fx.floater("+4 BRASERO", player.cx, player.cy + 22f, Pal.LAMP) }
+        }
         if (stats.rosario && kills % 10 == 0 && player.luzMax < 200f) {
             player.luzMax += 2f
             player.luz += 2f
@@ -1688,14 +1784,24 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
         if (mode != Mode.PLAYING || p.invulnerable) return false
         var total = amount
         if (src?.has(Affix.HAMBRIENTO) == true) total += 3f
+        if (stats.salmuera && src?.slowed == true) total *= 0.85f
         // Hambre de luz: +10 % de daño por cada 20 de tu Luz actual.
         if (src?.has(Affix.HAMBRE) == true) total *= 1f + 0.1f * (p.luz / 20f).toInt()
         lastCause = if (src != null) {
             val elite = src.affix?.let { a -> " (élite ${a.label}" + (src.affix2?.let { " y ${it.label}" } ?: "") + ")" } ?: ""
             "$attack · ${src.def.name}$elite"
         } else attack
+        // Mecha de reserva: una vez por piso, no te apagas.
+        if (p.luz - total <= 0f && stats.reserveWick && !wickUsed) {
+            wickUsed = true
+            total = p.luz - 1f
+            fireBlast(p.cx, p.cy, 80f)
+            showBanner("LA MECHA DE RESERVA PRENDE", 1.8f)
+        }
         p.luz -= total
         hurtCount++
+        if (stats.net) for (e in enemies) if (!e.killed && dist(e.x, e.y, p.cx, p.cy) < 64f) e.slow(0.5f, 2f)
+        if (stats.thorns && src != null && !src.killed && !src.isBoss) src.takeHit(this, 10f, p.cx, p.cy, HitKind.SLAM)
         intact = false
         p.hurtIframes = Balance.HIT_IFRAMES
         val dx = p.cx - sx
@@ -1827,7 +1933,7 @@ class World private constructor(val seed: Long, val kind: Kind, val test: Boolea
 
     fun playerLight(): Float {
         if (inSanctuary) return 210f
-        var r = if (stats.eye) 168f else Balance.lightRadius(player.luz)
+        var r = (if (stats.eye) 168f else Balance.lightRadius(player.luz)) + stats.lightBonus
         val k = player.veilK
         if (k > 0f && r > Balance.VEIL_RADIUS) r += (Balance.VEIL_RADIUS - r) * k
         if (flashT > 0f) r += (if (cl.xiombo.faro.data.Settings.softFlashes) 30f else 90f) * (flashT / FLASH_TIME)

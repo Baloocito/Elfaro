@@ -791,6 +791,10 @@ class Renderer : Disposable {
     /** Trampas, líneas del Copista, rastro de tinta, haces y ecos de la Lámpara, avisos de la Anguila y del Ojo. */
     private fun drawArchivoRaiz(w: World) {
         val blink = (w.time * 10f).toInt() % 2 == 0
+        for (z in w.saltZones) {
+            col(Pal.SALADO, 0.35f * (z[2] / 2f).coerceIn(0f, 1f))
+            shapes.circle(z[0], z[1], 12f, 12)
+        }
         for (dot in w.ink) {
             col(Pal.INK, (dot[2] / 3f).coerceIn(0f, 1f) * 0.9f)
             shapes.rect(dot[0] - 2f, dot[1] - 1f, 4f, 3f)
@@ -1068,7 +1072,7 @@ class Renderer : Disposable {
             }
             PedKind.JAULA -> {
                 // Barrotes de hierro; Amparo dentro hasta que la liberas.
-                if (!p.taken) drawAmparo(x, y - 2f, w.time)
+                if (!p.taken) drawNpc(p.metaId, x, y - 2f, w.time)
                 val open = p.taken
                 col(Pal.OUTLINE)
                 shapes.rect(x - 14f, y + 22f, 28f, 3f)
@@ -1087,6 +1091,22 @@ class Renderer : Disposable {
                 }
             }
             PedKind.AMPARO -> drawAmparo(x, y - 2f, w.time)
+            PedKind.NPC -> drawNpc(p.metaId, x, y - 2f, w.time)
+            PedKind.LOTE -> {
+                outlined(x - 7f, y - 6f, 14f, 8f, if (p.taken) Pal.LAMP_DIM else if (p.lockedText != null) Pal.SEAM else Pal.WALL_TOP)
+                // Un pozo pequeño con exvotos flotando.
+                for (i in 0 until 3) {
+                    val c = when (i) { 0 -> Pal.RARE; 1 -> Pal.EPIC; else -> Pal.CREAM }
+                    outlined(x - 6f + i * 5f, y + 4f + bob + (i % 2) * 2f, 3f, 3f, if (p.lockedText != null) Pal.SEAM else c)
+                }
+            }
+            PedKind.HEROE -> {
+                outlined(x - 6f, y - 6f, 12f, 6f, Pal.WALL_TOP)
+                val bruno = Meta.hero == "campanero"
+                outlined(x - 3f, y, 6f, 8f, if (bruno) Pal.VIOLET else Pal.COAT)
+                outlined(x - 2f, y + 8f, 4f, 4f, Pal.SKIN)
+                if (Meta.campaneroPlayable) { col(Pal.LAMP_HI, 0.5f + 0.4f * bob); shapes.rect(x - 7f, y + 13f, 14f, 1f) }
+            }
             PedKind.BOTELLA -> {
                 outlined(x - 3f, y - 4f + bob, 6f, 9f, Pal.GLASS_TEAL)
                 outlined(x - 1f, y + 5f + bob, 2f, 3f, Pal.GLASS_TEAL)
@@ -1123,6 +1143,40 @@ class Renderer : Disposable {
                 col(c)
                 shapes.rect(x - 2f, y + 5f + bob, 4f, 4f)
             }
+        }
+    }
+
+    /** Náufragos: cada uno con su silueta. */
+    private fun drawNpc(key: String?, x: Float, y: Float, t: Float) {
+        when (key) {
+            Meta.RESCUE_CAMPANERO -> {
+                col(Pal.SHADOW); shapes.ellipse(x - 5f, y - 3f, 10f, 4f)
+                outlined(x - 5f, y - 1f, 10f, 12f, Pal.VIOLET)
+                outlined(x - 4f, y + 11f, 8f, 7f, Pal.SKIN)
+                col(Pal.LILAC); shapes.rect(x - 4f, y + 11f, 8f, 1f)
+                col(Pal.OUTLINE); shapes.rect(x - 2f, y + 14f, 1f, 1f); shapes.rect(x + 1f, y + 14f, 1f, 1f)
+                val k = if ((t * 2f).toInt() % 2 == 0) 0f else 1f
+                col(Pal.STONE); shapes.triangle(x + 5f, y + 2f - k, x + 11f, y + 2f - k, x + 8f, y + 8f - k)
+            }
+            Meta.RESCUE_CARTOGRAFA -> {
+                col(Pal.SHADOW); shapes.ellipse(x - 5f, y - 3f, 10f, 4f)
+                outlined(x - 5f, y - 1f, 10f, 12f, Pal.PAPER_DIM)
+                col(Pal.INK); shapes.rect(x - 4f, y + 4f, 8f, 1f); shapes.rect(x, y, 1f, 9f)
+                outlined(x - 4f, y + 11f, 8f, 7f, Pal.SKIN)
+                col(Pal.BOOK_OCHRE); shapes.rect(x - 4f, y + 15f, 8f, 3f)
+                col(Pal.OUTLINE); shapes.rect(x - 2f, y + 13f, 1f, 1f); shapes.rect(x + 1f, y + 13f, 1f, 1f)
+                outlined(x + 5f, y + 1f, 2f, 9f, Pal.PAPER)
+            }
+            Meta.HIJA -> {
+                col(Pal.SHADOW); shapes.ellipse(x - 5f, y - 3f, 10f, 4f)
+                outlined(x - 5f, y - 1f, 10f, 12f, Pal.RAZ_WALL_TOP)
+                outlined(x - 4f, y + 11f, 8f, 7f, Pal.SKIN)
+                col(Pal.CORAL_RED); shapes.rect(x - 4f, y + 15f, 8f, 3f); shapes.rect(x - 5f, y + 11f, 1f, 5f)
+                col(Pal.OUTLINE); shapes.rect(x - 2f, y + 13f, 1f, 1f); shapes.rect(x + 1f, y + 13f, 1f, 1f)
+                // Un farol apagado en la mano.
+                outlined(x + 5f, y + 2f, 3f, 4f, Pal.SEAM)
+            }
+            else -> drawAmparo(x, y, t)
         }
     }
 
@@ -1197,11 +1251,18 @@ class Renderer : Disposable {
         shapes.ellipse(x - 6f, y - 4f, 12f, 5f)
         val blink = p.hurtIframes > 0f && (w.time * 15f).toInt() % 2 == 0
         if (!blink && !w.gameOver) {
-            val body = if (p.dashT > 0f) Pal.LAMP_HI else Pal.COAT
+            // Bruno, el campanero: hábito violeta, calva y una campanita al cuello.
+            val bruno = Meta.hero == "campanero" && Meta.campaneroPlayable && (!w.inSanctuary || true)
+            val body = if (p.dashT > 0f) Pal.LAMP_HI else if (bruno) Pal.VIOLET else Pal.COAT
             outlined(x - 5f, y - 3f, 10f, 12f, body)
             outlined(x - 4f, y + 9f, 8f, 7f, Pal.SKIN)
-            col(Pal.HAIR)
-            shapes.rect(x - 4f, y + 13f, 8f, 3f)
+            if (bruno) {
+                col(Pal.LILAC); shapes.rect(x - 4f, y + 9f, 8f, 1f)
+                col(Pal.STONE); shapes.rect(x - 1f, y + 5f, 2f, 2f)
+            } else {
+                col(Pal.HAIR)
+                shapes.rect(x - 4f, y + 13f, 8f, 3f)
+            }
             col(Pal.OUTLINE)
             if (p.aimX >= 0f) shapes.rect(x + 1f, y + 11f, 1f, 1f) else shapes.rect(x - 2f, y + 11f, 1f, 1f)
         }

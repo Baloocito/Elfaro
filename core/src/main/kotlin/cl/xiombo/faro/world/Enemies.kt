@@ -152,7 +152,7 @@ abstract class Enemy(val def: EnemyDef, x: Float, y: Float, val floor: Int, val 
         }
         if (burnT > 0f && !killed) {
             burnT -= dt
-            takeHit(w, Balance.BURN_DPS * dt, x, y, HitKind.BURN)
+            takeHit(w, w.stats.burnDps * dt, x, y, HitKind.BURN)
             if (MathUtils.randomBoolean(0.25f)) w.fx.ember(x, y)
         }
         if (kbX != 0f || kbY != 0f) {

@@ -50,6 +50,8 @@ object Meta {
     val endings = HashSet<String>()
     /** Personaje elegido: "isla" o "campanero". */
     var hero = "isla"
+    /** Lotes de exvotos comprados (0-5). */
+    var lots = 0
 
     /** Botellas con mensaje leídas (ids de [Bottles]). Todas abren el final B. */
     val bottles = HashSet<String>()
@@ -62,6 +64,12 @@ object Meta {
     /** Amparo, la guardesa: rescatarla en el Muelle abre la tienda del Santuario. */
     const val GUARDESA = "guardesa"
     val shopOpen get() = GUARDESA in unlocks
+    /** Náufragos rescatados (uno por bioma, §15). */
+    const val RESCUE_CAMPANERO = "rescate_campanero"
+    const val RESCUE_CARTOGRAFA = "rescate_cartografa"
+    const val HIJA = "hija"
+    /** El Campanero renegado comprado: se puede elegir como personaje. */
+    val campaneroPlayable get() = CAMPANERO in unlocks
 
     fun load() {
         runCatching {
@@ -76,6 +84,7 @@ object Meta {
             mareaBaja = p.getBoolean("meta.baja", false)
             endings.clear(); endings += p.getString("meta.endings", "").split(',').filter { it.isNotBlank() }
             hero = p.getString("meta.hero", "isla")
+            lots = p.getInteger("meta.lots", 0).coerceIn(0, Exvotos.LOTS)
             weapon = runCatching { Weapon.valueOf(p.getString("meta.weapon", "FAROL")) }.getOrDefault(Weapon.FAROL)
             if (!isUnlocked(weapon)) weapon = Weapon.FAROL
             startExvoto = p.getString("meta.startExvoto", "").ifBlank { null }
@@ -95,6 +104,7 @@ object Meta {
             p.putBoolean("meta.baja", mareaBaja)
             p.putString("meta.endings", endings.joinToString(","))
             p.putString("meta.hero", hero)
+            p.putInteger("meta.lots", lots)
             p.putString("meta.weapon", weapon.name)
             p.putString("meta.startExvoto", startExvoto ?: "")
             p.flush()
