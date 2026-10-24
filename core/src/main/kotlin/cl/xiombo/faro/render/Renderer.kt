@@ -2,6 +2,7 @@ package cl.xiombo.faro.render
 
 import cl.xiombo.faro.data.Balance
 import cl.xiombo.faro.data.Biome
+import cl.xiombo.faro.data.Edition
 import cl.xiombo.faro.data.Story
 import cl.xiombo.faro.data.Bottles
 import cl.xiombo.faro.data.Mareas
@@ -2151,9 +2152,12 @@ class Renderer : Disposable {
         drawBossBar(w)
 
         if (w.mode != World.Mode.PLAYING) {
-            val k = if (w.mode == World.Mode.DEAD) ((w.modeT - World.SLOWMO_TIME) * 0.8f).coerceIn(0f, 0.8f)
-            else (w.modeT * 0.6f).coerceIn(0f, 0.7f)
-            col(Pal.OUTLINE, k)
+            val k = when (w.mode) {
+                World.Mode.DEAD -> ((w.modeT - World.SLOWMO_TIME) * 0.8f).coerceIn(0f, 0.8f)
+                World.Mode.DEMO_END -> (w.modeT / 1.5f).coerceIn(0f, 1f)
+                else -> (w.modeT * 0.6f).coerceIn(0f, 0.7f)
+            }
+            col(if (w.mode == World.Mode.DEMO_END) Color.BLACK else Pal.OUTLINE, k)
             shapes.rect(0f, 0f, iw.toFloat(), ih.toFloat())
             if (w.mode == World.Mode.DEAD && w.modeT > World.SLOWMO_TIME) {
                 // Tarjeta de la muerte
@@ -2245,6 +2249,21 @@ class Renderer : Disposable {
         batch.projectionMatrix = screenProj
         font.data.setScale(max(1, scale / 2).toFloat())
         batch.begin()
+        if (w.mode == World.Mode.DEMO_END) {
+            // Fin de la demo: negro y el agradecimiento.
+            val a = ((w.modeT - 1.2f) / 1f).coerceIn(0f, 1f)
+            text(Edition.DEMO_THANKS, iw / 2f, ih * 0.62f, Pal.LAMP, alpha = a, align = 0)
+            text(Edition.DEMO_TEXT, iw / 2f, ih * 0.52f, Pal.CREAM, alpha = a, align = 0, wrap = iw * 0.7f)
+            val mm = (w.time / 60f).toInt()
+            val ss = (w.time % 60f).toInt()
+            val b = ((w.modeT - 2.2f) / 1f).coerceIn(0f, 1f)
+            text("Llegaste en ${mm}:${ss.toString().padStart(2, '0')}  ·  ${w.kills} bajas  ·  ${w.owned.size} exvotos", iw / 2f, ih * 0.36f, Pal.SHELL, alpha = b, align = 0)
+            text("FARO HUNDIDO  ·  TopinGames", iw / 2f, ih * 0.28f, Pal.LAMP_DIM, alpha = b, align = 0)
+            if (w.modeT > 3.5f) text(anyKeyText(c, "volver al Santuario"), iw / 2f, ih * 0.16f, Pal.LAMP_HI, align = 0)
+            batch.end()
+            font.color = Color.WHITE
+            return
+        }
         val p = w.player
         if (w.inSanctuary) {
             text("PERLAS ${Meta.perlas}", 8f, ih - 7f, Pal.SHELL)

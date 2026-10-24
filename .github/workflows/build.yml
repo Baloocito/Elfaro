@@ -46,6 +46,17 @@ jobs:
           mkdir -p dist
           cp android/build/outputs/apk/debug/android-debug.apk dist/FaroHundido.apk
           cp lwjgl3/build/libs/FaroHundido-*.jar dist/FaroHundido.jar
+
+      # Demo para quienes apoyan la campaña: el Muelle hasta la cámara de la Sirena.
+      - name: Compilar la demo
+        shell: bash
+        run: |
+          set -o pipefail
+          touch assets/demo.flag
+          ./gradlew --no-daemon -Pdemo android:assembleDebug lwjgl3:jar 2>&1 | tee -a build.log
+          cp android/build/outputs/apk/debug/android-debug.apk dist/FaroHundido-Demo.apk
+          cp lwjgl3/build/libs/FaroHundido-*.jar dist/FaroHundido-Demo.jar
+          rm assets/demo.flag
           ls -la dist
 
       - uses: actions/upload-artifact@v4
@@ -66,7 +77,7 @@ jobs:
             TAG="preview-${GITHUB_REF_NAME//\//-}"; TITLE="Vista previa: $GITHUB_REF_NAME"
           fi
           gh release delete "$TAG" --yes --cleanup-tag || true
-          gh release create "$TAG" dist/FaroHundido.apk dist/FaroHundido.jar \
+          gh release create "$TAG" dist/FaroHundido.apk dist/FaroHundido.jar dist/FaroHundido-Demo.apk dist/FaroHundido-Demo.jar \
             --prerelease \
             --target "$GITHUB_SHA" \
             --title "$TITLE" \

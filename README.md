@@ -15,6 +15,14 @@ Cada push a `main` compila el juego en GitHub Actions y actualiza la release **d
 El APK siempre se firma con la misma keystore de desarrollo (`android/debug.keystore`),
 así que cada versión nueva se instala encima de la anterior sin perder nada.
 
+## Demo para la campaña
+
+Cada build genera también `FaroHundido-Demo.apk` y `FaroHundido-Demo.jar`. Es el Muelle completo
+hasta la cámara de la Sirena: la Sirena aparece 3 s, la pantalla funde a negro y agradece el apoyo.
+Se instala aparte de la versión completa (otro paquete en Android), no tiene niveles de prueba
+ni teclas de depuración (en PC se pueden activar con `java -Dfaro.debug=true -jar ...` para probar).
+El CI la compila con `-Pdemo` y el archivo `assets/demo.flag`.
+
 ## Estado: F4 · Juego completo
 
 El juego está completo de principio a fin: 12 pisos, 5 jefes más uno secreto, 3 finales, 10 Mareas, tienda con lotes, 4 náufragos y audio.
