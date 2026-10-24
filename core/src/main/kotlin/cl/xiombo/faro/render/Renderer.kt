@@ -2257,7 +2257,7 @@ class Renderer : Disposable {
             val mm = (w.time / 60f).toInt()
             val ss = (w.time % 60f).toInt()
             val b = ((w.modeT - 2.2f) / 1f).coerceIn(0f, 1f)
-            text("Llegaste en ${mm}:${ss.toString().padStart(2, '0')}  ·  ${w.kills} bajas  ·  ${w.owned.size} exvotos", iw / 2f, ih * 0.36f, Pal.SHELL, alpha = b, align = 0)
+            text("Llegaste en ${mm}:${ss.toString().padStart(2, '0')}  ·  ${plural(w.kills, "baja", "bajas")}  ·  ${plural(w.owned.size, "exvoto", "exvotos")}", iw / 2f, ih * 0.36f, Pal.SHELL, alpha = b, align = 0)
             text("FARO HUNDIDO  ·  TopinGames", iw / 2f, ih * 0.28f, Pal.LAMP_DIM, alpha = b, align = 0)
             if (w.modeT > 3.5f) text(anyKeyText(c, "volver al Santuario"), iw / 2f, ih * 0.16f, Pal.LAMP_HI, align = 0)
             batch.end()
@@ -2324,7 +2324,7 @@ class Renderer : Disposable {
                     text(if (d.cause.startsWith("Abandonaste")) "RUN ABANDONADA" else "TE APAGÓ", iw / 2f, 190f, Pal.CORAL, align = 0)
                     text(d.cause, iw / 2f, 174f, Pal.LAMP_HI, align = 0)
                     text("Piso ${d.floor}  ·  sala ${d.roomType}  ·  entraste con ${d.entryLuz} de Luz", iw / 2f, 152f, Pal.CREAM, align = 0)
-                    text((if (d.enemiesLeft == 1) "Quedaba 1 enemigo" else "Quedaban ${d.enemiesLeft} enemigos") + "  ·  ${mm}:${ss.toString().padStart(2, '0')}  ·  ${w.kills} bajas  ·  ${w.owned.size} exvotos", iw / 2f, 136f, Pal.CREAM, align = 0)
+                    text((if (d.enemiesLeft == 1) "Quedaba 1 enemigo" else "Quedaban ${d.enemiesLeft} enemigos") + "  ·  ${mm}:${ss.toString().padStart(2, '0')}  ·  ${plural(w.kills, "baja", "bajas")}  ·  ${plural(w.owned.size, "exvoto", "exvotos")}", iw / 2f, 136f, Pal.CREAM, align = 0)
                     text("Perlas de esta run: ${w.perlasRun}   (total ${Meta.perlas})", iw / 2f, 114f, Pal.SHELL, align = 0)
                     text("${Mareas.label(w.marea, w.baja)}  ·  semilla ${w.seedCode}", iw / 2f, 100f, Pal.TIDE, align = 0)
                 }
@@ -2336,7 +2336,7 @@ class Renderer : Disposable {
                 val ending = if (w.biome == Biome.RAIZ) (if (w.finalC) Story.FINAL_C else if (Meta.allBottles) Story.FINAL_B else Story.FINAL_A) else null
                 text(ending?.first ?: "${w.biome.label} COMPLETADA", iw / 2f, ih * 0.80f, Pal.LAMP, align = 0)
                 ending?.let { text(it.second, iw / 2f, ih * 0.72f, Pal.CREAM, align = 0, wrap = iw * 0.8f) }
-                text("Tiempo ${mm}:${ss.toString().padStart(2, '0')}  ·  ${w.kills} bajas  ·  ${w.owned.size} exvotos", iw / 2f, ih * 0.52f, Pal.CREAM, align = 0)
+                text("Tiempo ${mm}:${ss.toString().padStart(2, '0')}  ·  ${plural(w.kills, "baja", "bajas")}  ·  ${plural(w.owned.size, "exvoto", "exvotos")}", iw / 2f, ih * 0.52f, Pal.CREAM, align = 0)
                 text("Perlas +${w.perlasRun}   (total ${Meta.perlas})   ·   ${Mareas.label(w.marea, w.baja)}   ·   semilla ${w.seedCode}", iw / 2f, ih * 0.45f, Pal.SHELL, align = 0)
                 text(if (Meta.allBottles) Story.VICTORIA_FINAL else Story.VICTORIA_FINAL + "  Botellas: ${Meta.bottles.size}/${Bottles.all.size}", iw / 2f, ih * 0.37f, Pal.CREAM, align = 0, wrap = iw * 0.85f)
                 if (w.modeT > 1.8f) text(anyKeyText(c, "volver al Santuario"), iw / 2f, ih * 0.25f, Pal.LAMP_HI, align = 0)
@@ -2373,6 +2373,8 @@ class Renderer : Disposable {
         batch.end()
         font.color = Color.WHITE
     }
+
+    private fun plural(n: Int, one: String, many: String) = "$n ${if (n == 1) one else many}"
 
     /** align: -1 izquierda, 0 centro, 1 derecha. Coordenadas internas convertidas a pantalla. */
     private fun text(s: String, ix: Float, iy: Float, color: Color, alpha: Float = 1f, align: Int = -1, wrap: Float = 0f) {
