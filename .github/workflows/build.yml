@@ -3,6 +3,8 @@ name: Build
 on:
   push:
     branches: [main, 'f*']
+    # Una etiqueta demo-vN publica la demo para quienes apoyan la campaña (release estable).
+    tags: ['demo-v*']
   pull_request:
   workflow_dispatch:
 
@@ -48,16 +50,45 @@ jobs:
           cp lwjgl3/build/libs/FaroHundido-*.jar dist/FaroHundido.jar
 
       # Demo para quienes apoyan la campaña: el Muelle hasta la cámara de la Sirena.
+      # La APK sale firmada con la llave propia del juego si están los secretos ANDROID_*;
+      # si no, con la de desarrollo (sirve para probar, pero no para entregar).
       - name: Compilar la demo
         shell: bash
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KS_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KS_KEYPASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -o pipefail
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/faro-release.jks"
+            export FARO_KEYSTORE="$RUNNER_TEMP/faro-release.jks"
+            export FARO_KEYSTORE_PASSWORD="$KS_PASS"
+            export FARO_KEY_ALIAS="$KS_ALIAS"
+            export FARO_KEY_PASSWORD="$KS_KEYPASS"
+            echo "Firma: llave propia del juego"
+          else
+            echo "Firma: llave de desarrollo (faltan los secretos ANDROID_*)"
+          fi
           touch assets/demo.flag
-          ./gradlew --no-daemon -Pdemo android:assembleDebug lwjgl3:jar 2>&1 | tee -a build.log
-          cp android/build/outputs/apk/debug/android-debug.apk dist/FaroHundido-Demo.apk
+          ./gradlew --no-daemon -Pdemo android:assembleRelease lwjgl3:jar 2>&1 | tee -a build.log
+          cp android/build/outputs/apk/release/android-release.apk dist/FaroHundido-Demo.apk
           cp lwjgl3/build/libs/FaroHundido-*.jar dist/FaroHundido-Demo.jar
           rm assets/demo.flag
+          rm -f "$RUNNER_TEMP/faro-release.jks"
           ls -la dist
+
+      # Comprobación: la APK de la demo debe estar firmada y se imprime la huella del certificado.
+      - name: Verificar la firma de la APK
+        shell: bash
+        run: |
+          APKSIGNER=$(ls $ANDROID_HOME/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --verbose --print-certs dist/FaroHundido-Demo.apk | tee firma.txt
+          grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" firma.txt || grep -q "Verified using v3 scheme" firma.txt
+          grep "SHA-256 digest" firma.txt | head -1 > huella.txt
+          cat huella.txt
+          echo "::notice title=Firma de la APK::$(cat huella.txt) | $(grep -m1 'Signer #1 certificate DN' firma.txt)"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -66,11 +97,29 @@ jobs:
 
       # main → release "dev" (el link de descarga no cambia).
       # Otras ramas → release "preview-<rama>" para probar antes de fusionar.
+      # Etiqueta demo-vN → release estable solo con la demo.
       - name: Publicar release
         if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if [[ "$GITHUB_REF" == refs/tags/demo-v* ]]; then
+            TAG="$GITHUB_REF_NAME"
+            cat > notas.md <<EOF
+          Demo de Faro Hundido: el Muelle hasta la cámara de la Sirena.
+
+          - **Windows:** descarga \`FaroHundido-Demo-Windows.zip\`, descomprímelo y abre \`Faro Hundido Demo.exe\`. No necesitas instalar nada.
+          - **Android:** descarga \`FaroHundido-Demo.apk\` y ábrelo. Si Android pregunta, permite instalar desde esta fuente.
+          - Huella de la firma de la APK: $(sed 's/.*: //' huella.txt)
+          EOF
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              gh release upload "$TAG" dist/FaroHundido-Demo.apk dist/FaroHundido-Demo.jar --clobber
+            else
+              gh release create "$TAG" dist/FaroHundido-Demo.apk dist/FaroHundido-Demo.jar \
+                --target "$GITHUB_SHA" --title "Faro Hundido Demo ${TAG#demo-}" --notes-file notas.md
+            fi
+            exit 0
+          fi
           if [ "$GITHUB_REF_NAME" = "main" ]; then
             TAG=dev; TITLE="Build de desarrollo"
           else
@@ -82,3 +131,74 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "$TITLE" \
             --notes "Commit ${GITHUB_SHA::7}: $(git log -1 --pretty=%s)"
+
+  # Paquete de Windows: el JAR con su propio Java dentro (jpackage), listo para abrir sin instalar nada.
+  windows:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: faro-hundido-${{ github.sha }}
+          path: dist
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Empaquetar con jpackage
+        shell: pwsh
+        run: |
+          function Note($title, $text) {
+            $t = ($text | Out-String).Trim() -replace '%','%25' -replace "`r?`n",'%0A'
+            Write-Host "::notice title=$title::$t"
+          }
+          function Pack($jar, $name, $zip) {
+            Remove-Item -Recurse -Force in, out -ErrorAction SilentlyContinue
+            New-Item -ItemType Directory in | Out-Null
+            Copy-Item "dist/$jar" "in/$jar"
+            $out = jpackage --type app-image --input in --main-jar $jar --name $name --dest out `
+              --vendor TopinGames --app-version 0.1.0 --add-modules ALL-MODULE-PATH `
+              --java-options "-Xmx768m" 2>&1
+            Note "jpackage $name (codigo $LASTEXITCODE)" $out
+            if ($LASTEXITCODE -ne 0) { throw "jpackage falló con $name" }
+            Note "Contenido $name" (Get-ChildItem "out/$name" -Recurse -Depth 1 | Select-Object -First 15 | ForEach-Object { $_.FullName.Replace((Get-Location).Path, '') })
+            try {
+              Compress-Archive -Path "out/$name" -DestinationPath "dist/$zip" -Force
+              Note "Zip $zip" ((Get-Item "dist/$zip").Length)
+            } catch { Note "Error al comprimir $name" $_.Exception.Message; throw }
+            # Prueba de humo informativa: se abre el lanzador .exe. Sin GPU el juego no puede mostrar
+            # ventana, así que solo se anota si el proceso arranca o se cierra y con qué código.
+            try {
+              Note "runtime/bin $name" (Get-ChildItem "out/$name/runtime/bin" | ForEach-Object Name)
+              $exe = (Resolve-Path "out/$name/$name.exe").Path
+              $proc = Start-Process $exe -PassThru
+              if (-not $proc.WaitForExit(15000)) { Note "Humo $name" "Sigue en ejecución tras 15 s (arrancó)"; $proc.Kill() }
+              else { Note "Humo $name" "Se cerró con código $($proc.ExitCode)" }
+            } catch { Note "Humo $name (sin resultado)" $_.Exception.Message }
+          }
+          Pack "FaroHundido-Demo.jar" "Faro Hundido Demo" "FaroHundido-Demo-Windows.zip"
+          Pack "FaroHundido.jar" "Faro Hundido" "FaroHundido-Windows.zip"
+          Get-ChildItem dist | Format-Table Name, Length
+          exit 0
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: faro-hundido-windows-${{ github.sha }}
+          path: |
+            dist/FaroHundido-Demo-Windows.zip
+            dist/FaroHundido-Windows.zip
+
+      - name: Añadir al release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/demo-v* ]]; then
+            gh release upload "$GITHUB_REF_NAME" dist/FaroHundido-Demo-Windows.zip --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            if [ "$GITHUB_REF_NAME" = "main" ]; then TAG=dev; else TAG="preview-${GITHUB_REF_NAME//\//-}"; fi
+            gh release upload "$TAG" dist/FaroHundido-Demo-Windows.zip dist/FaroHundido-Windows.zip --clobber --repo "$GITHUB_REPOSITORY"
+          fi

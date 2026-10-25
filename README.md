@@ -17,11 +17,25 @@ así que cada versión nueva se instala encima de la anterior sin perder nada.
 
 ## Demo para la campaña
 
-Cada build genera también `FaroHundido-Demo.apk` y `FaroHundido-Demo.jar`. Es el Muelle completo
-hasta la cámara de la Sirena: la Sirena aparece 3 s, la pantalla funde a negro y agradece el apoyo.
-Se instala aparte de la versión completa (otro paquete en Android), no tiene niveles de prueba
-ni teclas de depuración (en PC se pueden activar con `java -Dfaro.debug=true -jar ...` para probar).
-El CI la compila con `-Pdemo` y el archivo `assets/demo.flag`.
+Es el Muelle completo hasta la cámara de la Sirena: la Sirena aparece 3 s, la pantalla funde a negro
+y agradece el apoyo. No tiene niveles de prueba ni teclas de depuración (en PC se pueden activar con
+`java -Dfaro.debug=true -jar ...` para probar). El CI la compila con `-Pdemo` y el archivo `assets/demo.flag`.
+
+**Para entregarla a quienes donan** hay un release estable que no cambia con cada commit:
+
+1. Guarda en GitHub los secretos de firma (una sola vez): Settings > Secrets and variables > Actions >
+   `ANDROID_KEYSTORE_B64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` y `ANDROID_KEY_PASSWORD`.
+   La llave (`faro-release.jks`) no está en el repo; guárdala en un lugar seguro: si se pierde, las
+   actualizaciones de la APK dejan de instalarse sobre la anterior.
+2. Publica una versión con una etiqueta: `git tag demo-v1 && git push origin demo-v1`.
+3. El CI crea el release "Faro Hundido Demo v1" con tres archivos:
+   - `FaroHundido-Demo-Windows.zip`: se descomprime y se abre `Faro Hundido Demo.exe`. Lleva su propio Java.
+   - `FaroHundido-Demo.apk`: firmada con la llave del juego (la huella del certificado sale en las notas).
+   - `FaroHundido-Demo.jar`: para quien ya tenga Java.
+4. Entregas a cada donante el link del release (o un link directo al `.zip` o `.apk`).
+
+Los builds normales (`dev` y `preview-*`) también traen la demo, pero firmada con la llave de desarrollo
+y sin garantía de estar estable: no son para entregar.
 
 ## Estado: F4 · Juego completo
 
