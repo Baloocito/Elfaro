@@ -165,18 +165,23 @@ jobs:
             Note "jpackage $name (codigo $LASTEXITCODE)" $out
             if ($LASTEXITCODE -ne 0) { throw "jpackage falló con $name" }
             Note "Contenido $name" (Get-ChildItem "out/$name" -Recurse -Depth 1 | Select-Object -First 15 | ForEach-Object { $_.FullName.Replace((Get-Location).Path, '') })
-            Compress-Archive -Path "out/$name" -DestinationPath "dist/$zip" -Force
+            try {
+              Compress-Archive -Path "out/$name" -DestinationPath "dist/$zip" -Force
+              Note "Zip $zip" ((Get-Item "dist/$zip").Length)
+            } catch { Note "Error al comprimir $name" $_.Exception.Message; throw }
             # Prueba de humo: el Java incluido arranca el juego. Aquí no hay GPU, así que se espera un
             # error de OpenGL/GLFW, pero nunca de clases o módulos que falten.
-            $java = (Resolve-Path "out/$name/runtime/bin/java.exe").Path
-            $jarPath = (Resolve-Path "out/$name/app/$jar").Path
-            $proc = Start-Process $java -ArgumentList "-jar", "`"$jarPath`"" -RedirectStandardOutput smoke.out -RedirectStandardError smoke.err -PassThru -NoNewWindow
-            if (-not $proc.WaitForExit(20000)) { $proc.Kill() }
-            $log = ((Get-Content smoke.out, smoke.err -ErrorAction SilentlyContinue) | Select-Object -First 25) -join "`n"
-            Note "Prueba de humo $name" $log
-            if ($log -match "NoClassDefFoundError|ClassNotFoundException|NoSuchMethodError|module .* not found") {
-              throw "Faltan clases o módulos en $name"
-            }
+            try {
+              $java = (Resolve-Path "out/$name/runtime/bin/java.exe").Path
+              $jarPath = (Resolve-Path "out/$name/app/$jar").Path
+              $proc = Start-Process $java -ArgumentList "-jar", "`"$jarPath`"" -RedirectStandardOutput smoke.out -RedirectStandardError smoke.err -PassThru -NoNewWindow
+              if (-not $proc.WaitForExit(20000)) { $proc.Kill() }
+              $log = ((Get-Content smoke.out, smoke.err -ErrorAction SilentlyContinue) | Select-Object -First 25) -join "`n"
+              Note "Prueba de humo $name" $log
+              if ($log -match "NoClassDefFoundError|ClassNotFoundException|NoSuchMethodError|module .* not found") {
+                throw "Faltan clases o módulos en $name"
+              }
+            } catch { Note "Error en la prueba de humo $name" $_.Exception.Message; throw }
           }
           Pack "FaroHundido-Demo.jar" "Faro Hundido Demo" "FaroHundido-Demo-Windows.zip"
           Pack "FaroHundido.jar" "Faro Hundido" "FaroHundido-Windows.zip"
