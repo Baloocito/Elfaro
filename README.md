@@ -258,6 +258,10 @@ llegar a todas las puertas y marcadores.
 - `main` publica la release **dev**.
 - Las ramas de fase (`f1`, `f2`…) publican **preview-<rama>** para probar antes de fusionar.
 
+## Informes de avance
+
+Los informes para redes sociales, con capturas, están en [`docs/avances`](docs/avances/README.md).
+
 ## Siguiente fase: F5 · Arte y balance
 
 Arte final en pixel art (atlas por bioma a partir de los sprites ASCII del documento), balance de
